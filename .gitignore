@@ -9,3 +9,9 @@ build/
 .venv/
 venv/
 *.log
+.agents/
+.claude/
+airflow/logs/
+airflow/secrets/
+infra/backups/
+*.sql.gz

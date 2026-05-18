@@ -28,15 +28,37 @@ DAG_AUDIO = os.getenv("DAG_AUDIO_INGESTION", "dag_audio_ingestion")
 DAG_TEXT = os.getenv("DAG_TEXT_INGESTION", "dag_text_ingestion")
 
 
-def _trigger_dag(dag_id: str, guid: str) -> Optional[str]:
+def _airflow_token() -> Optional[str]:
     if not AIRFLOW_URL:
         return None
     try:
         response = httpx.post(
-            f"{AIRFLOW_URL.rstrip('/')}/api/v1/dags/{dag_id}/dagRuns",
-            json={"conf": {"guid": guid}, "dag_run_id": f"triage-{guid}"},
-            auth=(AIRFLOW_USER, AIRFLOW_PASS),
+            f"{AIRFLOW_URL.rstrip('/')}/auth/token",
+            json={"username": AIRFLOW_USER, "password": AIRFLOW_PASS},
             timeout=5.0,
+        )
+        response.raise_for_status()
+        return response.json().get("access_token")
+    except httpx.HTTPError:
+        return None
+
+
+def _trigger_dag(dag_id: str, guid: str) -> Optional[str]:
+    if not AIRFLOW_URL:
+        return None
+    token = _airflow_token()
+    if not token:
+        return None
+    try:
+        response = httpx.post(
+            f"{AIRFLOW_URL.rstrip('/')}/api/v2/dags/{dag_id}/dagRuns",
+            json={
+                "conf": {"guid": guid},
+                "dag_run_id": f"triage-{guid}",
+                "logical_date": None,
+            },
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=10.0,
         )
         response.raise_for_status()
         return response.json().get("dag_run_id")
@@ -108,6 +130,9 @@ async def ingesta(
         url_texto_original=url_texto,
         motor_workflow=motor,
     )
+
+    if texto is not None:
+        db.upsert_texto_procesado(guid, {"resumen_es": texto})
 
     dag_id = DAG_AUDIO if audio is not None else DAG_TEXT
     workflow_id = _trigger_dag(dag_id, guid)

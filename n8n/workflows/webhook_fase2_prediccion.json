@@ -1,0 +1,77 @@
+{
+  "name": "webhook_fase2_prediccion",
+  "active": false,
+  "settings": {"executionOrder": "v1"},
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "predict",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wh-predict",
+      "name": "Webhook Predict",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "webhookId": "f2-predict-01HXYZABCD0000000000000001"
+    },
+    {
+      "parameters": {
+        "url": "http://api-gateway-ingesta:8000/ingesta",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {"name": "texto", "value": "={{$json.body.texto}}"},
+            {"name": "origen", "value": "={{$json.body.origen || 'MVP'}}"},
+            {"name": "id_caso", "value": "={{$json.body.id_caso || ''}}"}
+          ]
+        },
+        "method": "POST",
+        "options": {"response": {"response": {"responseFormat": "json"}}}
+      },
+      "id": "http-ingesta",
+      "name": "Ingesta",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {"id": "1", "name": "guid", "value": "={{$json.guid}}", "type": "string"},
+            {"id": "2", "name": "estado", "value": "={{$json.estado}}", "type": "string"},
+            {"id": "3", "name": "workflow_id", "value": "={{$json.workflow_id}}", "type": "string"},
+            {"id": "4", "name": "consulta_url", "value": "=/webhook/resultado?guid={{$json.guid}}", "type": "string"},
+            {"id": "5", "name": "mensaje", "value": "Pipeline lanzado. Consulta el resultado en consulta_url cuando estado=TEXTO_ENRIQUECIDO.", "type": "string"}
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-response",
+      "name": "Build Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [720, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {}
+      },
+      "id": "respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [960, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Predict": {"main": [[{"node": "Ingesta", "type": "main", "index": 0}]]},
+    "Ingesta": {"main": [[{"node": "Build Response", "type": "main", "index": 0}]]},
+    "Build Response": {"main": [[{"node": "Respond", "type": "main", "index": 0}]]}
+  }
+}

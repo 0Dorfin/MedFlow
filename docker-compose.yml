@@ -1,20 +1,36 @@
 x-airflow-common: &airflow-common
-  image: apache/airflow:2.10.3-python3.11
+  image: apache/airflow:3.0.5-python3.11
   environment: &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
     AIRFLOW__CORE__LOAD_EXAMPLES: "false"
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+    AIRFLOW__CORE__AUTH_MANAGER: airflow.api_fastapi.auth.managers.simple.simple_auth_manager.SimpleAuthManager
+    AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_USERS: "${AIRFLOW_ADMIN_USER:-admin}:admin"
+    AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_PASSWORDS_FILE: /opt/airflow/secrets/simple_auth_manager_passwords.json.generated
+    AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS: "false"
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-api-server:8080/execution/
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${AIRFLOW_DB_USER:-airflow}:${AIRFLOW_DB_PASSWORD:-airflow_pw}@postgres:5432/${AIRFLOW_DB_NAME:-airflow_db}
-    AIRFLOW__API__AUTH_BACKENDS: "airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session"
-    AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
-    _AIRFLOW_WWW_USER_USERNAME: ${AIRFLOW_ADMIN_USER:-admin}
-    _AIRFLOW_WWW_USER_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD:-admin}
-    _PIP_ADDITIONAL_REQUIREMENTS: "apache-airflow-providers-http==4.13.1"
+    AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW_JWT_SECRET:-cambia-este-jwt-secret-de-32-caracteres-minimo}
+    AIRFLOW__API__EXPOSE_CONFIG: "true"
+    _PIP_ADDITIONAL_REQUIREMENTS: "apache-airflow-providers-http==5.0.0"
+    N8N_ERROR_WEBHOOK: ${N8N_ERROR_WEBHOOK:-http://n8n:5678/webhook/error}
+    PREPROCESSING_URL: http://preprocessing:9101
+    TRANSCRIPCION_URL: http://transcripcion:9100
+    LLM_EXTRACTION_URL: http://llm-extraction:9110
+    LLM_NORMALIZATION_URL: http://llm-normalization:9111
+    LLM_LABELING_URL: http://llm-labeling:9112
+    ANXIETY_SCORE_URL: http://anxiety-score:9113
+    DATASET_BUILDER_URL: http://dataset-builder:9120
+    ML_TRAINING_URL: http://ml-training:9121
+    ML_PREDICTION_URL: http://ml-prediction:9122
+    EVALUATION_URL: http://evaluation:9123
+    AUDIT_ETHICS_URL: http://audit-ethics:9124
   volumes:
     - ./airflow/dags:/opt/airflow/dags
     - ./airflow/logs:/opt/airflow/logs
     - ./airflow/plugins:/opt/airflow/plugins
     - ./airflow/config:/opt/airflow/config
+    - ./airflow/secrets:/opt/airflow/secrets
   user: "${AIRFLOW_UID:-50000}:0"
   networks: [triage_net]
   depends_on:
@@ -124,22 +140,20 @@ services:
       - -c
       - |
         airflow db migrate && \
-        airflow users create \
-          --username "${AIRFLOW_ADMIN_USER:-admin}" \
-          --password "${AIRFLOW_ADMIN_PASSWORD:-admin}" \
-          --firstname Admin --lastname Admin \
-          --role Admin --email admin@triage.local || true
+        mkdir -p /opt/airflow/secrets && \
+        printf '{"%s":"%s"}' "${AIRFLOW_ADMIN_USER:-admin}" "${AIRFLOW_ADMIN_PASSWORD:-admin}" \
+          > /opt/airflow/secrets/simple_auth_manager_passwords.json.generated
     restart: "no"
 
-  airflow-webserver:
+  airflow-api-server:
     <<: *airflow-common
     container_name: triage_airflow_web
-    command: webserver
+    command: api-server
     restart: unless-stopped
     ports:
       - "${AIRFLOW_WEBSERVER_PORT:-8080}:8080"
     healthcheck:
-      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/api/v2/monitor/health"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -167,6 +181,43 @@ services:
       airflow-init:
         condition: service_completed_successfully
 
+  airflow-dag-processor:
+    <<: *airflow-common
+    container_name: triage_airflow_dag_processor
+    command: dag-processor
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", 'airflow jobs check --job-type DagProcessorJob --hostname "$${HOSTNAME}" || exit 1']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+
+  n8n-bootstrap:
+    image: n8nio/n8n:1.74.1
+    container_name: triage_n8n_bootstrap
+    user: "node"
+    depends_on:
+      n8n:
+        condition: service_healthy
+    environment:
+      HOME: /home/node
+      DB_TYPE: sqlite
+      WORKFLOWS_DIR: /workflows
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:-cambia-esta-clave-de-32-caracteres}
+    entrypoint: ["/bin/sh", "/scripts/import-workflows.sh"]
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n/workflows:/workflows:ro
+      - ./infra/n8n:/scripts:ro
+    networks: [triage_net]
+    restart: "no"
+
   n8n:
     image: n8nio/n8n:1.74.1
     container_name: triage_n8n
@@ -187,7 +238,7 @@ services:
       - n8n_data:/home/node/.n8n
       - ./n8n/workflows:/home/node/.n8n/workflows
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:5678/healthz >/dev/null 2>&1 || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:5678/healthz >/dev/null 2>&1 || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -231,6 +282,15 @@ services:
     environment:
       API_GATEWAY_INGESTA_URL: http://api-gateway-ingesta:8000
       API_GATEWAY_CONSULTA_URL: http://api-gateway-consulta:8001
+      PREPROCESSING_URL: http://preprocessing:9101
+      LLM_EXTRACTION_URL: http://llm-extraction:9110
+      LLM_NORMALIZATION_URL: http://llm-normalization:9111
+      LLM_LABELING_URL: http://llm-labeling:9112
+      ANXIETY_SCORE_URL: http://anxiety-score:9113
+      ML_PREDICTION_URL: http://ml-prediction:9122
+      EVALUATION_URL: http://evaluation:9123
+      AUDIT_ETHICS_URL: http://audit-ethics:9124
+      TRANSCRIPCION_URL: http://transcripcion:9100
     ports:
       - "${STREAMLIT_PORT:-8501}:8501"
     networks: [triage_net]
@@ -314,6 +374,12 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-triage_pw}
       POSTGRES_DB: ${POSTGRES_DB:-triage_db}
       OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
+      LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-meta-llama/llama-3.2-3b-instruct:free}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      LLM_TIMEOUT: ${LLM_TIMEOUT:-120}
+      LLM_MAX_RETRIES: ${LLM_MAX_RETRIES:-3}
       OLLAMA_DEFAULT_MODEL: ${OLLAMA_DEFAULT_MODEL:-qwen3:4b}
       OLLAMA_TIMEOUT: ${OLLAMA_TIMEOUT:-120}
       OLLAMA_MAX_RETRIES: ${OLLAMA_MAX_RETRIES:-3}
@@ -339,6 +405,12 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-triage_pw}
       POSTGRES_DB: ${POSTGRES_DB:-triage_db}
       OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
+      LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-meta-llama/llama-3.2-3b-instruct:free}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      LLM_TIMEOUT: ${LLM_TIMEOUT:-120}
+      LLM_MAX_RETRIES: ${LLM_MAX_RETRIES:-3}
       OLLAMA_DEFAULT_MODEL: ${OLLAMA_DEFAULT_MODEL:-qwen3:4b}
       OLLAMA_TIMEOUT: ${OLLAMA_TIMEOUT:-120}
       OLLAMA_MAX_RETRIES: ${OLLAMA_MAX_RETRIES:-3}
@@ -364,6 +436,12 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-triage_pw}
       POSTGRES_DB: ${POSTGRES_DB:-triage_db}
       OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
+      LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-meta-llama/llama-3.2-3b-instruct:free}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      LLM_TIMEOUT: ${LLM_TIMEOUT:-120}
+      LLM_MAX_RETRIES: ${LLM_MAX_RETRIES:-3}
       OLLAMA_DEFAULT_MODEL: ${OLLAMA_DEFAULT_MODEL:-qwen3:4b}
       OLLAMA_TIMEOUT: ${OLLAMA_TIMEOUT:-120}
       OLLAMA_MAX_RETRIES: ${OLLAMA_MAX_RETRIES:-3}
@@ -389,6 +467,12 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-triage_pw}
       POSTGRES_DB: ${POSTGRES_DB:-triage_db}
       OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
+      LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-meta-llama/llama-3.2-3b-instruct:free}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      LLM_TIMEOUT: ${LLM_TIMEOUT:-120}
+      LLM_MAX_RETRIES: ${LLM_MAX_RETRIES:-3}
       OLLAMA_DEFAULT_MODEL: ${OLLAMA_DEFAULT_MODEL:-qwen3:4b}
       OLLAMA_TIMEOUT: ${OLLAMA_TIMEOUT:-120}
       OLLAMA_MAX_RETRIES: ${OLLAMA_MAX_RETRIES:-3}
