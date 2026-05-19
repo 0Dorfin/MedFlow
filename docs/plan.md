@@ -7,24 +7,40 @@
 
 ## Estado actual
 
-**Fecha:** 2026-05-14
-**Iteración en curso:** Iteración 2 (siguiente paso)
-**Última iteración completada:** **Iteración 1 — Librería común y prompts**
+**Fecha:** 2026-05-19
+**Iteración en curso:** Iteración 5 — Fareez + Modelo ML real
+**Última iteración completada:** **Iteración 4 — Flujos n8n**
 
 | Iter | Contenido | Estado |
 |---|---|---|
 | 0 | Esqueleto e infraestructura (docker-compose, Postgres, minIO, Ollama, Airflow, n8n, Whisper, Streamlit, diccionario Manchester) | ✅ Completada |
 | 1 | Librería común `triage_common` (contracts, db, storage, llm, dictionary), prompts Jinja2, 67 tests unitarios verdes | ✅ Completada |
-| 2 | Microservicios FastAPI: A (gateways+prepro) + B (LLM+Whisper) + C (ML pipeline) ✅ con 132 tests + E2E pipeline completo; D (Streamlit UI) pendiente | ⏳ En curso |
-| 3 | DAGs Airflow (audio, texto, training, evaluación, auditoría) | ⏳ Pendiente |
-| 4 | Flujos n8n (webhook Fase 2, notificaciones de error) | ⏳ Pendiente |
-| 5 | Descarga del corpus Fareez et al. + entrenamiento del modelo ML | ⏳ Pendiente |
+| 2 | Microservicios FastAPI: A (gateways+prepro) + B (LLM+Whisper) + C (ML pipeline) + D (Streamlit UI) | ✅ Completada |
+| 3 | DAGs Airflow (audio, texto, llm_enrichment, training, prediction_fase2, evaluación, auditoría, smoke_test) | ✅ Completada |
+| 4 | Flujos n8n (webhook Fase 2, notificaciones de error) | ✅ Completada |
+| 5 | Descarga del corpus Fareez et al. + ingesta de 290 casos + entrenamiento del modelo ML | ⏳ **En curso** |
 | 6 | Tests de integración y E2E | ⏳ Pendiente |
 | 7 | Documentación final, MVP Streamlit completo y presentación | ⏳ Pendiente |
 
-**Hito alcanzado:** infraestructura levantando (Postgres, minIO, Whisper, Streamlit healthy) y librería compartida `triage_common` lista, instalable como paquete pip (`services/_common/pyproject.toml`), con 67 tests unitarios verdes ejecutados en un contenedor `python:3.11-slim` aislado. Cubre: contratos Pydantic (TriageLevel C1-C5, GrupoClinico, Origen, Validacion, modelos de request/response de todos los servicios), cliente Postgres con helpers (`insert_entrevista`, `update_entrevista_estado`, `mark_timestamp`, `upsert_texto_procesado`, `upsert_prediccion`, `log_task`, `fetch_resultado_completo`), cliente minIO (put/get bytes/file, presign, `ensure_buckets`, constantes de bucket), cliente Ollama (`generate`, `generate_json`, `render`, `render_and_generate*`, reintentos con tenacity), módulo de diccionario clínico cerrado (normalización con strip de acentos + fuzzy substring) y 3 plantillas Jinja2 en `data/prompts/` (extract_entities, normalize_entities, label_triage) con few-shot RES/MSK/CAR/GAS bilingüe EN/ES.
+**Hito alcanzado (snapshot 2026-05-19):** stack completo levantado (20 contenedores healthy) y pipeline end-to-end ejercitado contra el corpus Fareez real. Estado en Postgres:
 
-**Siguiente paso concreto:** crear los microservicios FastAPI bajo `services/<nombre>/` reutilizando `triage_common`. Empezar por `api-gateway-ingesta`, `transcripcion` (completar el endpoint `/transcribe` que actualmente solo tiene `/health`), y luego los servicios de LLM (extraction, normalization, labeling) y ML (training, prediction, evaluation, audit-ethics).
+- **290 entrevistas** totales en la base
+- **274 en `Estado=AUDITADO`** (pipeline completo: ingesta → preprocessing → extracción → normalización → labeling → score → predicción → evaluación → auditoría)
+- **11 atascadas en `ENTIDADES_NORMALIZADAS`** (no llegaron a labeling)
+- **5 atascadas en `RECIBIDO`** (no llegaron a preprocessing)
+- **285 con `triage_real` etiquetado por LLM** (sin revisión humana aún)
+- **274 predicciones registradas + validadas**
+- **27 casos con `motivo_fallo`** marcados por `audit-ethics` por sesgo emocional (~9.9% under-triage, justo en el umbral objetivo `<10%`)
+- Corpus Fareez descargado en `data/fareez_dataset/transcripts/` (CAR, MSK, RES, GAS, GEN, DER)
+- DAGs Airflow committeados: `dag_audio_ingestion`, `dag_text_ingestion`, `dag_llm_enrichment`, `dag_model_training`, `dag_prediction_phase_2`, `dag_evaluation`, `dag_audit_ethics`, `dag_smoke_test` + helpers compartidos
+- Workflows n8n committeados (commit `d68e0ea`)
+- Scripts utilitarios: `seed_postgres.py`, `retry_stuck.py`, `recompute_normalization.py`, `recompute_anxiety.py`, `predict_batch.py`, `ml_baseline.py`
+
+**Siguiente paso concreto (Iteración 5):**
+1. Desatascar los 16 casos rotos (5 RECIBIDO + 11 ENTIDADES_NORMALIZADAS) con `scripts/retry_stuck.py`.
+2. Revisión humana del `triage_real` para 50 casos de control (el ground truth actual es 100% LLM).
+3. Ampliar `dataset-builder` con modo `f2` (join con `Prediccion`).
+4. Re-ejecutar `dag_model_training` con el dataset Fareez completo y validar que `metrics.json` cumple Recall(C1) ≥ 0.85, Recall(C2) ≥ 0.80, F1-macro ≥ 0.70.
 
 ---
 
@@ -346,7 +362,7 @@ Ejemplo (vista resumida, columnas F1 ocultas):
 - [x] `data/prompts/label_triage.j2` — JSON `{triage, justificacion}` con criterios Manchester y principio precautorio.
 - [x] **Verificación:** `docker run --rm -v $PWD:/repo python:3.11-slim` ejecuta `pytest` → **67 tests pasan** cubriendo contracts (TriageLevel, validators, enums), dictionary (8 casos exactos del PDF + fuzzy + no_mapeados), db (mock psycopg2, JSONB wrapping, rollback en error), storage (mock minio, presign, ensure_buckets, parse_uri) y llm (mock httpx, retries con backoff, render Jinja con StrictUndefined).
 
-### Iteración 2 — Microservicios Python (3–4 días) ⏳ (en curso, bloque A completado)
+### Iteración 2 — Microservicios Python (3–4 días) ✅
 
 Cada servicio: FastAPI + `Dockerfile`, expone `POST /run` (JSON con `guid` + payload), registra en `Task_Log`.
 
@@ -377,37 +393,40 @@ Cada servicio: FastAPI + `Dockerfile`, expone `POST /run` (JSON con `guid` + pay
 - [x] `audit-ethics` (`:9124`) — detecta under-triage por sesgo emocional (`score_ansiedad_ia ≥ 0.8` + predicción peor que real), escribe `motivo_fallo` y `accion_correctiva`, estado `AUDITADO`. Tests: 6 verdes.
 - [x] **Smoke E2E con seed 12 filas**: dataset → modelo LogReg (F1-macro 0.47, Recall(C1/C2) 0.33 — limitado por 12 muestras) → predicción `C1` correcta en caso clínico (presión torácica + síncope) → evaluation 'Acierto' → audit-ethics sin sesgo. Estado avanza hasta `AUDITADO`. La calidad subirá con dataset real Fareez (272 casos) en Iter 5.
 
-**Bloque D (UI) ⏳ (siguiente):**
+**Bloque D (UI) ✅:**
 
-- [ ] `streamlit-mvp` — UI completa con upload, polling, visualización del triage.
+- [x] `streamlit-mvp` — UI completa con upload, polling, visualización del triage (contenedor `triage_streamlit` healthy en `:8501`).
 
 - **Verificación bloque A:** `pytest` en docker (21 tests verdes) + smoke test con `curl` cubriendo ingesta → preprocessing → consulta.
 
-### Iteración 3 — DAGs Airflow (Fase 1) (2–3 días)
+### Iteración 3 — DAGs Airflow (Fase 1) (2–3 días) ✅
 
-`SimpleHttpOperator`; cada tarea registra timestamps; `retries=2`, `on_failure_callback` → webhook n8n.
+`SimpleHttpOperator`; cada tarea registra timestamps; `retries=2`, `on_failure_callback` → webhook n8n. Helpers compartidos extraídos a `airflow/dags/triage_helpers.py`.
 
-- [ ] `dag_audio_ingestion.py` — manual trigger con `guid`: transcripcion → preprocessing → extraction → normalization → labeling → anxiety-score → `Estado=TEXTO_ENRIQUECIDO`.
-- [ ] `dag_text_ingestion.py` — sin transcripción.
-- [ ] `dag_llm_enrichment.py` — batch sobre `Estado=RECIBIDO`.
-- [ ] `dag_model_training.py` — dataset-builder → ml-training → guarda URL del modelo.
-- [ ] `dag_evaluation.py` — sobre `Estado=PREDICHO`.
-- [ ] `dag_audit_ethics.py` — sobre `Estado=EVALUADO`.
-- **Verificación:** disparar el DAG con audio de muestra y trazar en Postgres + Airflow UI.
+- [x] `dag_audio_ingestion.py` — manual trigger con `guid`: transcripcion → preprocessing → extraction → normalization → labeling → anxiety-score → `Estado=TEXTO_ENRIQUECIDO`.
+- [x] `dag_text_ingestion.py` — sin transcripción.
+- [x] `dag_llm_enrichment.py` — batch sobre `Estado=RECIBIDO`.
+- [x] `dag_model_training.py` — dataset-builder → ml-training → guarda URL del modelo.
+- [x] `dag_prediction_phase_2.py` — predicción para Fase 2.
+- [x] `dag_evaluation.py` — sobre `Estado=PREDICHO`.
+- [x] `dag_audit_ethics.py` — sobre `Estado=EVALUADO`.
+- [x] `dag_smoke_test.py` — verificación end-to-end de la cadena de servicios.
+- **Verificación:** 274 entrevistas del corpus Fareez alcanzaron `Estado=AUDITADO` a través de los DAGs.
 
-### Iteración 4 — Flujos n8n (Fase 2 + notificaciones) (1–2 días)
+### Iteración 4 — Flujos n8n (Fase 2 + notificaciones) (1–2 días) ✅
 
-- [ ] `webhook_fase2_prediccion.json` — `POST /webhook/predict` con audio/texto → ingesta → polling → ml-prediction → audit-ethics → respuesta `{guid, triage, justificacion, score, validacion}`.
-- [ ] `webhook_consulta_resultado.json` — `GET /webhook/resultado/{guid}`.
-- [ ] `error_notification.json` — recibe callbacks de Airflow.
-- **Verificación:** `curl -X POST :5678/webhook/predict -F "audio=@samples/SIM_G1_01.wav"` devuelve triage Manchester.
+- [x] Workflows n8n committeados en `n8n/workflows/` (commit `d68e0ea`).
+- [x] `triage_n8n` healthy en `:5678` con `triage_n8n_bootstrap` cargando los workflows al arranque.
+- **Pendiente de verificación E2E:** `curl -X POST :5678/webhook/predict -F "audio=@samples/SIM_G1_01.wav"` — se valida en Iteración 6.
 
-### Iteración 5 — Datos Fareez et al. y Modelo ML (3 días)
+### Iteración 5 — Datos Fareez et al. y Modelo ML (3 días) ⏳ EN CURSO
 
 **Dataset:**
-- [ ] `scripts/download_fareez.py` (descarga desde Hugging Face).
-- [ ] `scripts/seed_postgres.py` (ingesta los 272 casos lanzando `dag_audio_ingestion`).
-- [ ] Ground truth: revisión humana del `triage_real` para 50 casos de control.
+- [x] Corpus Fareez descargado en `data/fareez_dataset/transcripts/` (~290 transcripciones CAR/MSK/RES/GAS/GEN/DER).
+- [x] `scripts/seed_postgres.py` ejecutado — 290 filas en `Entrevista`, 274 alcanzaron `AUDITADO`.
+- [x] Scripts utilitarios añadidos: `retry_stuck.py`, `recompute_normalization.py`, `recompute_anxiety.py`, `predict_batch.py`, `ml_baseline.py`.
+- [ ] **Desatascar 16 casos rotos:** 5 en `RECIBIDO`, 11 en `ENTIDADES_NORMALIZADAS` — usar `scripts/retry_stuck.py`.
+- [ ] **Ground truth humano** para 50 casos de control (los 285 `triage_real` actuales son 100% LLM).
 - [ ] Ampliar `dataset-builder` con modo `f2` (incluye columnas de `Prediccion`).
 
 **Features de entrenamiento (input F1):**
@@ -424,6 +443,7 @@ Cada servicio: FastAPI + `Dockerfile`, expone `POST /run` (JSON con `guid` + pay
 **Métricas en `metrics.json`:** accuracy global, P/R/F1 por clase, matriz de confusión PNG, Recall específico C1/C2, tasa de under-triage total y por sesgo emocional.
 
 - **Verificación:** `metrics.json` cumple objetivos; under-triage por sesgo < 10%.
+- **Snapshot 2026-05-19:** Audit-ethics actual marca 27/274 casos con sesgo emocional → **9.9% under-triage**, justo en el umbral. Pendiente re-entrenar con el corpus Fareez completo (incluyendo los 16 casos desatascados y los 50 con ground truth humano) y validar Recall(C1)/Recall(C2).
 
 ### Iteración 6 — Tests integración y E2E (2 días)
 

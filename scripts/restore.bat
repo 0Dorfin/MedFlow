@@ -8,7 +8,7 @@ if "%~1"=="" (
 )
 
 set "SRC=%~f1"
-set "PROJECT_PREFIX=proyecto_triage_6"
+set "PROJECT_PREFIX=triaje-urgencias"
 set "VOLUMES=postgres_data minio_data n8n_data"
 
 if not exist "%SRC%" (
