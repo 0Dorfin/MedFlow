@@ -1,0 +1,4 @@
+export const TIMEOUT_INGESTA_MS = 300_000;
+export const TIMEOUT_TRANSCRIPCION_MS = 600_000;
+export const TIMEOUT_LLM_MS = 180_000;
+export const TIMEOUT_ML_MS = 120_000;

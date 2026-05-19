@@ -273,6 +273,32 @@ services:
         condition: service_healthy
     networks: [triage_net]
 
+  frontend:
+    build:
+      context: .
+      dockerfile: services/frontend/Dockerfile
+    container_name: triage_frontend
+    restart: unless-stopped
+    environment:
+      API_GATEWAY_INGESTA_URL: http://api-gateway-ingesta:8000
+      API_GATEWAY_CONSULTA_URL: http://api-gateway-consulta:8001
+      TRANSCRIPCION_URL: http://transcripcion:9100
+      PREPROCESSING_URL: http://preprocessing:9101
+      LLM_EXTRACTION_URL: http://llm-extraction:9110
+      LLM_NORMALIZATION_URL: http://llm-normalization:9111
+      LLM_LABELING_URL: http://llm-labeling:9112
+      ANXIETY_SCORE_URL: http://anxiety-score:9113
+      ML_PREDICTION_URL: http://ml-prediction:9122
+      AUDIT_ETHICS_URL: http://audit-ethics:9124
+      NEXT_PROXY_TIMEOUT_MS: ${NEXT_PROXY_TIMEOUT_MS:-600000}
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    depends_on:
+      - api-gateway-ingesta
+      - api-gateway-consulta
+      - transcripcion
+    networks: [triage_net]
+
   streamlit-mvp:
     build:
       context: .

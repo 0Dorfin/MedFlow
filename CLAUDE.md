@@ -28,6 +28,7 @@ Estas dos reglas aplican a todo nuevo código y a cualquier refactor de código 
 | Airflow webserver | 8080 | LocalExecutor |
 | n8n | 5678 | basic auth |
 | Transcripción (faster-whisper) | 9100 | `services/transcripcion/` |
+| Frontend Next.js | 3000 | `services/frontend/` |
 | Streamlit MVP | 8501 | `services/streamlit-mvp/` |
 | API Gateway ingesta | 8000 | pendiente, Iter 2 |
 | API Gateway consulta | 8001 | pendiente, Iter 2 |
