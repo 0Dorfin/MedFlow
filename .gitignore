@@ -16,3 +16,4 @@ airflow/secrets/
 infra/backups/
 *.sql.gz
 skills-lock.json
+backups/
