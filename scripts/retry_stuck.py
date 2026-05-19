@@ -18,7 +18,7 @@ PG_DSN = "host=localhost port=5432 dbname={db} user={user} password={pw}".format
 AIRFLOW = os.getenv("AIRFLOW_BASE_URL", "http://localhost:8080")
 AUTH = (os.getenv("AIRFLOW_ADMIN_USER", "admin"), os.getenv("AIRFLOW_ADMIN_PASSWORD", "admin"))
 DAG = os.getenv("DAG_TEXT_INGESTION", "dag_text_ingestion")
-TERMINAL = ("TEXTO_ENRIQUECIDO", "MODELO_ENTRENADO", "PREDICHO", "EVALUADO", "AUDITADO")
+TERMINAL = ("TEXTO_ENRIQUECIDO", "DATASET_GENERADO", "MODELO_ENTRENADO", "PREDICHO", "EVALUADO", "AUDITADO")
 
 
 def select_stuck() -> list[tuple[str, str]]:

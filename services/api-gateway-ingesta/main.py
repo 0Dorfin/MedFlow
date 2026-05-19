@@ -7,7 +7,21 @@ from typing import Annotated, Optional
 
 import httpx
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from langdetect import DetectorFactory, detect
 from pydantic import ValidationError
+
+
+DetectorFactory.seed = 0
+
+
+def _detect_lang(texto: str) -> str:
+    try:
+        lang = detect(texto[:2000])
+    except Exception:
+        return "es"
+    if lang.startswith("en"):
+        return "en"
+    return "es"
 
 from triage_common import db, storage
 from triage_common.contracts import (
@@ -132,7 +146,11 @@ async def ingesta(
     )
 
     if texto is not None:
-        db.upsert_texto_procesado(guid, {"resumen_es": texto})
+        lang = _detect_lang(texto)
+        if lang == "en":
+            db.upsert_texto_procesado(guid, {"texto_original_en": texto})
+        else:
+            db.upsert_texto_procesado(guid, {"resumen_es": texto})
 
     dag_id = DAG_AUDIO if audio is not None else DAG_TEXT
     workflow_id = _trigger_dag(dag_id, guid)

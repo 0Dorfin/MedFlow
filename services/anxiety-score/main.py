@@ -43,13 +43,37 @@ ANXIETY_LEXICON = {
     "muy mal": 0.5,
     "morirme": 0.95,
     "voy a morir": 1.0,
+    "scared": 0.7,
+    "terrified": 0.9,
+    "panic": 0.95,
+    "panicking": 0.95,
+    "can't breathe": 0.9,
+    "i'm dying": 1.0,
+    "i'm going to die": 1.0,
+    "feel like i'm dying": 1.0,
+    "this is killing me": 0.85,
+    "i can't take it": 0.85,
+    "i can't stand it": 0.85,
+    "unbearable": 0.85,
+    "worst pain": 0.8,
+    "very afraid": 0.8,
+    "really afraid": 0.8,
+    "horrible": 0.6,
+    "really bad": 0.5,
+    "anxious": 0.7,
+    "nervous": 0.6,
+    "freaking out": 0.85,
+    "help me": 0.8,
+    "save me": 0.95,
 }
 
 LEXICON_PROMPT = (
-    "Eres un asistente clinico. Lee el texto del paciente y devuelve UN unico numero "
-    "decimal entre 0 y 1 que represente su nivel de ansiedad o panico subjetivo. "
-    "0 = totalmente calmado; 1 = panico extremo. Devuelve SOLO el numero, sin texto.\n\n"
-    "Texto:\n\"{texto}\"\n\nNumero:"
+    "You are a clinical assistant. Read the patient's words and rate their subjective anxiety/panic level. "
+    "Return ONLY a single decimal number between 0.00 and 1.00:\n"
+    "0.0 = calm and matter-of-fact, 0.2 = mildly worried, 0.5 = clearly anxious, 0.8 = very distressed or fearful, 1.0 = extreme panic ('I'm dying', 'help me').\n"
+    "Calibrate so that calm clinical descriptions score below 0.2 and overt expressions of fear, dread, or imminent danger score above 0.7.\n"
+    "The text may be in Spanish or English.\n\n"
+    "Text:\n\"{texto}\"\n\nNumber:"
 )
 
 
@@ -88,7 +112,9 @@ def llm_score(texto: str) -> float:
 
 
 def combine(lex: float, llm_s: float) -> float:
-    value = 0.4 * lex + 0.6 * llm_s
+    value = max(lex, llm_s) if lex > 0 else llm_s
+    if lex > 0:
+        value = 0.5 * lex + 0.5 * max(lex, llm_s)
     return round(max(0.0, min(1.0, value)), 2)
 
 

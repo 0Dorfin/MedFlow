@@ -31,3 +31,83 @@ sintoma_coloquial,termino_clinico,prioridad_sugerida,grupo_clinico
 "lumbago",lumbalgia,C4,MSK
 "esguince",esguince,C4,MSK
 "torcedura",esguince,C4,MSK
+"tos",tos,C3,RES
+"tos seca",tos,C3,RES
+"tos persistente",tos,C3,RES
+"tos productiva",tos,C3,RES
+"tos con flemas",tos,C3,RES
+"expectoracion",tos,C3,RES
+"cough",tos,C3,RES
+"cefalea",cefalea,C3,OTRO
+"dolor de cabeza",cefalea,C3,OTRO
+"headache",cefalea,C3,OTRO
+"migrana",cefalea,C2,OTRO
+"congestion nasal",congestion_nasal,C4,RES
+"nariz tapada",congestion_nasal,C4,RES
+"mocos",rinorrea,C4,RES
+"rinorrea",rinorrea,C4,RES
+"secrecion nasal",rinorrea,C4,RES
+"runny nose",rinorrea,C4,RES
+"stuffy nose",congestion_nasal,C4,RES
+"odinofagia",odinofagia,C3,RES
+"dolor al tragar",odinofagia,C3,RES
+"dolor de garganta",odinofagia,C3,RES
+"sore throat",odinofagia,C3,RES
+"escalofrios",escalofrios,C3,RES
+"chills",escalofrios,C3,RES
+"hormigueo",parestesia,C4,OTRO
+"entumecimiento",parestesia,C4,OTRO
+"numbness",parestesia,C4,OTRO
+"tingling",parestesia,C4,OTRO
+"prurito",prurito,C4,OTRO
+"picor",prurito,C4,OTRO
+"itching",prurito,C4,OTRO
+"itchy",prurito,C4,OTRO
+"malestar general",malestar,C4,OTRO
+"malaise",malestar,C4,OTRO
+"feel unwell",malestar,C4,OTRO
+"somnolencia",somnolencia,C4,OTRO
+"drowsy",somnolencia,C4,OTRO
+"mareo",mareo,C3,OTRO
+"dizzy",mareo,C3,OTRO
+"dizziness",mareo,C3,OTRO
+"vertigo",mareo,C3,OTRO
+"nauseas",nauseas,C3,GAS
+"nausea",nauseas,C3,GAS
+"vomiting",vomitos,C3,GAS
+"diarrhea",diarrea,C4,GAS
+"disuria",disuria,C3,OTRO
+"dolor al orinar",disuria,C3,OTRO
+"dysuria",disuria,C3,OTRO
+"dolor abdominal",dolor_abdominal,C3,GAS
+"abdominal pain",dolor_abdominal,C3,GAS
+"belly pain",dolor_abdominal,C3,GAS
+"stomach pain",dolor_abdominal,C3,GAS
+"rigidez",rigidez,C4,MSK
+"stiffness",rigidez,C4,MSK
+"debilidad",debilidad,C3,OTRO
+"weakness",debilidad,C3,OTRO
+"sudoracion",sudoracion,C3,OTRO
+"sudoracion fria",sudoracion,C2,CAR
+"sweating",sudoracion,C3,OTRO
+"cold sweat",sudoracion,C2,CAR
+"palpitaciones",palpitaciones,C3,CAR
+"palpitations",palpitaciones,C3,CAR
+"chest tightness",dolor_toracico_opresivo,C2,CAR
+"chest pressure",dolor_toracico_opresivo,C2,CAR
+"shortness of breath",disnea,C2,RES
+"trouble breathing",disnea,C2,RES
+"difficulty breathing",disnea,C2,RES
+"wheezing",sibilancias,C2,RES
+"fever",fiebre,C3,RES
+"high fever",fiebre,C3,RES
+"fatigue",fatiga,C4,RES
+"tired",fatiga,C4,RES
+"swelling",edema,C4,MSK
+"swollen",edema,C4,MSK
+"back pain",lumbalgia,C4,MSK
+"low back pain",lumbalgia,C4,MSK
+"sprain",esguince,C4,MSK
+"fainted",sincope,C1,CAR
+"passed out",sincope,C1,CAR
+"lost consciousness",sincope,C1,CAR

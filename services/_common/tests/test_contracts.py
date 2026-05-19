@@ -131,8 +131,13 @@ class TestGrupoFromIdCaso:
     def test_lowercase(self):
         assert grupo_from_id_caso("res0051") == GrupoClinico.RES
 
-    def test_unknown_prefix(self):
-        assert grupo_from_id_caso("SIM_G1_01") is None
+    def test_unknown_prefix_alpha_falls_back_to_otro(self):
+        assert grupo_from_id_caso("SIM_G1_01") == GrupoClinico.OTRO
+        assert grupo_from_id_caso("DER0001") == GrupoClinico.OTRO
+        assert grupo_from_id_caso("GEN0001") == GrupoClinico.OTRO
+
+    def test_unknown_prefix_non_alpha_is_none(self):
+        assert grupo_from_id_caso("123abc") is None
 
     def test_none(self):
         assert grupo_from_id_caso(None) is None

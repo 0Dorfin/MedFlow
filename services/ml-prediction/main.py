@@ -101,7 +101,7 @@ def reload() -> ReloadResponse:
 
 
 @app.post("/run", response_model=PredictResponse)
-def run(req: PredictRequest) -> PredictResponse:
+def run(req: PredictRequest, dry_run: bool = False) -> PredictResponse:
     started = datetime.utcnow()
     pipeline = _ensure_loaded()["pipeline"]
 
@@ -109,36 +109,39 @@ def run(req: PredictRequest) -> PredictResponse:
         pred, probs = _predict(pipeline, req.texto, req.entidades_normalizadas)
         triage = TriageLevel(pred)
     except ValueError as exc:
-        _log_error(req.guid, started, f"prediction parse error: {exc}")
+        if not dry_run:
+            _log_error(req.guid, started, f"prediction parse error: {exc}")
         raise HTTPException(status_code=500, detail=str(exc))
     except Exception as exc:
-        _log_error(req.guid, started, f"prediction failed: {exc}")
+        if not dry_run:
+            _log_error(req.guid, started, f"prediction failed: {exc}")
         raise HTTPException(status_code=500, detail=str(exc))
 
     score_anx = 0.0
-    with db.get_connection() as conn, conn.cursor() as cur:
-        cur.execute("SELECT score_ansiedad FROM Texto_Procesado WHERE guid = %s", (req.guid,))
-        row = cur.fetchone()
-        if row and row[0] is not None:
-            score_anx = float(row[0])
+    if not dry_run:
+        with db.get_connection() as conn, conn.cursor() as cur:
+            cur.execute("SELECT score_ansiedad FROM Texto_Procesado WHERE guid = %s", (req.guid,))
+            row = cur.fetchone()
+            if row and row[0] is not None:
+                score_anx = float(row[0])
 
-    db.upsert_prediccion(
-        req.guid,
-        prediccion_ia=triage.value,
-        score_ansiedad_ia=score_anx,
-    )
-    db.update_entrevista_estado(req.guid, EntrevistaEstado.PREDICHO)
-
-    db.log_task(
-        TaskLogEntry(
-            guid=req.guid,
-            service_name="ml-prediction",
-            timestamp_inicio=started,
-            timestamp_fin=datetime.utcnow(),
-            status=TaskStatus.OK,
-            payload_resultado={"prediccion_ia": triage.value, "probabilidades": probs},
+        db.upsert_prediccion(
+            req.guid,
+            prediccion_ia=triage.value,
+            score_ansiedad_ia=score_anx,
         )
-    )
+        db.update_entrevista_estado(req.guid, EntrevistaEstado.PREDICHO)
+
+        db.log_task(
+            TaskLogEntry(
+                guid=req.guid,
+                service_name="ml-prediction",
+                timestamp_inicio=started,
+                timestamp_fin=datetime.utcnow(),
+                status=TaskStatus.OK,
+                payload_resultado={"prediccion_ia": triage.value, "probabilidades": probs},
+            )
+        )
 
     return PredictResponse(
         guid=req.guid,

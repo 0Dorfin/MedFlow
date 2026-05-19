@@ -32,6 +32,7 @@ def get_storage() -> storage.StorageClient:
 class BuildRequest(BaseModel):
     min_rows: int = 1
     only_origin: Optional[str] = None
+    mode: str = "f1"
 
 
 class BuildResponse(BaseModel):
@@ -39,6 +40,43 @@ class BuildResponse(BaseModel):
     url: str
     rows: int
     triage_distribution: dict[str, int]
+    mode: str = "f1"
+
+
+def _fetch_f2_dataset(only_origin: Optional[str]) -> list[dict]:
+    sql = """
+        SELECT v.guid_entrevista AS guid,
+               v.id_caso,
+               v.origen,
+               v.resumen_es,
+               v.entidades_normalizadas_es,
+               v.triage_real,
+               v.score_ansiedad,
+               v.prediccion_ia,
+               v.score_ansiedad_ia,
+               v.validacion,
+               v.motivo_fallo
+        FROM v_resultado_completo v
+        WHERE v.prediccion_ia IS NOT NULL
+          AND v.validacion IS NOT NULL
+          AND (
+              (v.guid_entrevista NOT LIKE 'seed-%%'
+               AND v.id_caso IS NOT NULL
+               AND length(trim(v.id_caso)) > 0)
+              OR v.triage_real = 'C1'
+          )
+    """
+    params: list = []
+    if only_origin:
+        sql += " AND v.origen = %s"
+        params.append(only_origin)
+    sql += " ORDER BY v.id_caso"
+
+    with db.get_connection() as conn, conn.cursor() as cur:
+        cur.execute(sql, params)
+        columns = [c.name for c in cur.description]
+        rows = [dict(zip(columns, row)) for row in cur.fetchall()]
+    return rows
 
 
 def _fetch_dataset(only_origin: Optional[str]) -> list[dict]:
@@ -55,6 +93,12 @@ def _fetch_dataset(only_origin: Optional[str]) -> list[dict]:
         FROM Entrevista e
         JOIN Texto_Procesado t ON t.guid = e.GUID_Entrevista
         WHERE t.triage_real IS NOT NULL
+          AND (
+              (e.GUID_Entrevista NOT LIKE 'seed-%%'
+               AND e.ID_CASO IS NOT NULL
+               AND length(trim(e.ID_CASO)) > 0)
+              OR t.triage_real = 'C1'
+          )
     """
     params: list = []
     if only_origin:
@@ -77,18 +121,22 @@ def health() -> dict[str, str]:
 @app.post("/run", response_model=BuildResponse)
 def run(req: BuildRequest) -> BuildResponse:
     started = datetime.utcnow()
-    rows = _fetch_dataset(req.only_origin)
+    mode = (req.mode or "f1").lower()
+    if mode not in ("f1", "f2"):
+        raise HTTPException(status_code=400, detail=f"mode invalido: {req.mode} (f1|f2)")
+
+    rows = _fetch_f2_dataset(req.only_origin) if mode == "f2" else _fetch_dataset(req.only_origin)
 
     if len(rows) < req.min_rows:
         _log(
             None,
             started,
             TaskStatus.ERROR,
-            error=f"dataset insuficiente: {len(rows)} < {req.min_rows}",
+            error=f"dataset {mode} insuficiente: {len(rows)} < {req.min_rows}",
         )
         raise HTTPException(
             status_code=400,
-            detail=f"Dataset insuficiente ({len(rows)} filas, min {req.min_rows})",
+            detail=f"Dataset {mode} insuficiente ({len(rows)} filas, min {req.min_rows})",
         )
 
     df = pd.DataFrame(rows)
@@ -96,9 +144,12 @@ def run(req: BuildRequest) -> BuildResponse:
         df["entidades_extraidas_es"] = df["entidades_extraidas_es"].apply(_as_list)
     if "entidades_normalizadas_es" in df.columns:
         df["entidades_normalizadas_es"] = df["entidades_normalizadas_es"].apply(_as_list)
+    for numeric_col in ("score_ansiedad", "score_ansiedad_ia"):
+        if numeric_col in df.columns:
+            df[numeric_col] = pd.to_numeric(df[numeric_col], errors="coerce").astype("float32")
 
     batch_id = datetime.utcnow().strftime("%Y%m%dT%H%M%S") + "-" + uuid.uuid4().hex[:6]
-    object_name = f"{batch_id}.parquet"
+    object_name = f"triage_{mode}_{batch_id}.parquet"
 
     buf = io.BytesIO()
     df.to_parquet(buf, index=False, engine="pyarrow")
@@ -108,13 +159,14 @@ def run(req: BuildRequest) -> BuildResponse:
         storage.BUCKET_DATASETS, object_name, data, "application/octet-stream"
     )
 
-    for guid in df["guid"].tolist():
-        db.update_entrevista_estado(guid, EntrevistaEstado.DATASET_GENERADO)
-        with db.get_connection() as conn, conn.cursor() as cur:
-            cur.execute(
-                "UPDATE Entrevista SET URL_Dataset_Generado = %s WHERE GUID_Entrevista = %s",
-                (url, guid),
-            )
+    if mode == "f1":
+        for guid in df["guid"].tolist():
+            db.update_entrevista_estado(guid, EntrevistaEstado.DATASET_GENERADO)
+            with db.get_connection() as conn, conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE Entrevista SET URL_Dataset_Generado = %s WHERE GUID_Entrevista = %s",
+                    (url, guid),
+                )
 
     distribution = (
         df["triage_real"].value_counts().to_dict() if "triage_real" in df.columns else {}
@@ -133,6 +185,7 @@ def run(req: BuildRequest) -> BuildResponse:
         url=url,
         rows=len(df),
         triage_distribution=distribution,
+        mode=mode,
     )
 
 

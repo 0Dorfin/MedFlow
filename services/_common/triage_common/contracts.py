@@ -275,4 +275,6 @@ def grupo_from_id_caso(id_caso: Optional[str]) -> Optional[GrupoClinico]:
         prefix = upper[:length]
         if prefix in _GRUPO_PREFIXES:
             return GrupoClinico(prefix)
+    if upper[:1].isalpha():
+        return GrupoClinico.OTRO
     return None

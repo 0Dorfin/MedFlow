@@ -53,6 +53,22 @@ def fetch_resumen(guid: str) -> str:
         return row[0]
 
 
+def fetch_resumen_or_none(guid: str) -> Optional[str]:
+    with db_conn() as conn, conn.cursor() as cur:
+        cur.execute("SELECT resumen_es FROM Texto_Procesado WHERE guid = %s", (guid,))
+        row = cur.fetchone()
+        return row[0] if row and row[0] else None
+
+
+def fetch_texto_original_en(guid: str) -> Optional[str]:
+    with db_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT texto_original_en FROM Texto_Procesado WHERE guid = %s", (guid,)
+        )
+        row = cur.fetchone()
+        return row[0] if row and row[0] else None
+
+
 def fetch_audio_url(guid: str) -> str:
     with db_conn() as conn, conn.cursor() as cur:
         cur.execute("SELECT URL_Audio_Original FROM Entrevista WHERE GUID_Entrevista = %s", (guid,))
