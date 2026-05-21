@@ -59,3 +59,32 @@ export type PipelineOptions = {
   origen: string;
   groundTruth?: ManchesterCode;
 };
+
+export type HistorialItem = {
+  guid_entrevista: string;
+  id_caso: string | null;
+  origen: string | null;
+  estado: string | null;
+  inicio_solicitud: string | null;
+  triage_real: ManchesterCode | null;
+  score_ansiedad: number | null;
+  prediccion_ia: ManchesterCode | null;
+  score_ansiedad_ia: number | null;
+  validacion: string | null;
+};
+
+export type ResultadoCompleto = {
+  guid_entrevista: string;
+  id_caso: string | null;
+  origen: string | null;
+  estado: string | null;
+  resumen_es: string | null;
+  entidades_normalizadas_es: NormalizedEntity[] | null;
+  triage_real: ManchesterCode | null;
+  score_ansiedad: number | null;
+  justificacion_llm: string | null;
+  prediccion_ia: ManchesterCode | null;
+  score_ansiedad_ia: number | null;
+  validacion: string | null;
+  motivo_fallo: string | null;
+};

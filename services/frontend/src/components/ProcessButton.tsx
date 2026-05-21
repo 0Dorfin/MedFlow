@@ -2,7 +2,7 @@
 
 import { useRef } from "react";
 import { motion, useMotionValue, useSpring, useTransform } from "framer-motion";
-import { Pulse } from "@phosphor-icons/react";
+import { ArrowRight, Pulse } from "@phosphor-icons/react";
 
 type ProcessButtonProps = {
   disabled: boolean;
@@ -32,6 +32,8 @@ export function ProcessButton({ disabled, loading, onClick }: ProcessButtonProps
     y.set(0);
   };
 
+  const idle = !disabled && !loading;
+
   return (
     <motion.button
       ref={ref}
@@ -42,7 +44,7 @@ export function ProcessButton({ disabled, loading, onClick }: ProcessButtonProps
       onMouseLeave={handleLeave}
       style={{ x: translateX, y: translateY }}
       whileTap={{ scale: 0.98 }}
-      className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-700 px-6 py-4 text-base font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-45"
+      className={`flex w-full items-center justify-center gap-2 rounded-2xl bg-zinc-900 px-6 py-4 text-base font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.14),0_12px_26px_-12px_rgba(24,24,27,0.5)] transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-45 dark:bg-zinc-100 dark:text-zinc-900 dark:shadow-[inset_0_1px_0_rgba(0,0,0,0.06),0_12px_26px_-12px_rgba(0,0,0,0.3)] dark:hover:bg-white ${idle ? "sheen" : ""}`}
     >
       {loading ? (
         <>
@@ -55,7 +57,10 @@ export function ProcessButton({ disabled, loading, onClick }: ProcessButtonProps
           Procesando pipeline...
         </>
       ) : (
-        "Analizar triaje"
+        <>
+          Iniciar triaje
+          <ArrowRight size={18} weight="bold" />
+        </>
       )}
     </motion.button>
   );

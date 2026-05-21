@@ -41,14 +41,14 @@ type AuditResponse = {
 
 const STEP_LABELS: Record<PipelineStepId, string> = {
   ingesta: "Ingesta del audio",
-  transcripcion: "Transcripcion Whisper",
+  transcripcion: "Transcripción Whisper",
   preprocessing: "Preprocesamiento",
-  extraction: "Extraccion de entidades",
-  normalization: "Normalizacion Manchester",
+  extraction: "Extracción de entidades",
+  normalization: "Normalización Manchester",
   labeling: "Etiquetado LLM",
   anxiety: "Score de ansiedad",
-  prediction: "Prediccion ML",
-  audit: "Auditoria etica",
+  prediction: "Predicción ML",
+  audit: "Auditoría ética",
 };
 
 const STEP_SHORT: Record<PipelineStepId, string> = {
@@ -63,7 +63,7 @@ const STEP_SHORT: Record<PipelineStepId, string> = {
   audit: "Audit",
 };
 
-const INITIAL_STEPS: PipelineStepId[] = [
+const AUDIO_STEPS: PipelineStepId[] = [
   "ingesta",
   "transcripcion",
   "preprocessing",
@@ -74,8 +74,18 @@ const INITIAL_STEPS: PipelineStepId[] = [
   "prediction",
 ];
 
-function buildSteps(extraAudit: boolean): PipelineStep[] {
-  const ids = extraAudit ? [...INITIAL_STEPS, "audit" as PipelineStepId] : INITIAL_STEPS;
+const TEXT_STEPS: PipelineStepId[] = [
+  "ingesta",
+  "preprocessing",
+  "extraction",
+  "normalization",
+  "labeling",
+  "anxiety",
+  "prediction",
+];
+
+function buildSteps(baseIds: PipelineStepId[], extraAudit: boolean): PipelineStep[] {
+  const ids = extraAudit ? [...baseIds, "audit" as PipelineStepId] : baseIds;
   return ids.map((id) => ({
     id,
     label: STEP_LABELS[id],
@@ -84,95 +94,69 @@ function buildSteps(extraAudit: boolean): PipelineStep[] {
   }));
 }
 
+const MAX_ATTEMPTS = 3;
+const RETRY_BASE_MS = 600;
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function runStep<T>(
   steps: PipelineStep[],
   id: PipelineStepId,
   fn: () => Promise<T>,
   onUpdate: (steps: PipelineStep[]) => void,
 ): Promise<T> {
-  const next = steps.map((s) =>
-    s.id === id ? { ...s, status: "running" as const, error: undefined } : s,
-  );
-  onUpdate(next);
+  const target = steps.find((s) => s.id === id);
+  if (!target) throw new Error(`Paso desconocido: ${id}`);
+
+  target.status = "running";
+  target.error = undefined;
+  onUpdate([...steps]);
+
   const started = performance.now();
-  try {
-    const result = await fn();
-    const done = next.map((s) =>
-      s.id === id
-        ? {
-            ...s,
-            status: "ok" as const,
-            durationMs: performance.now() - started,
-            response: result,
-          }
-        : s,
-    );
-    onUpdate(done);
-    return result;
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Error desconocido";
-    const failed = next.map((s) =>
-      s.id === id
-        ? {
-            ...s,
-            status: "error" as const,
-            durationMs: performance.now() - started,
-            error: message,
-          }
-        : s,
-    );
-    onUpdate(failed);
-    throw err;
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+    try {
+      const result = await fn();
+      target.status = "ok";
+      target.durationMs = performance.now() - started;
+      target.response = result;
+      onUpdate([...steps]);
+      return result;
+    } catch (err) {
+      lastError = err;
+      if (attempt < MAX_ATTEMPTS) {
+        target.status = "running";
+        target.error = `Reintentando (${attempt}/${MAX_ATTEMPTS})`;
+        onUpdate([...steps]);
+        await delay(RETRY_BASE_MS * attempt);
+      }
+    }
   }
+
+  const message = lastError instanceof Error ? lastError.message : "Error desconocido";
+  target.status = "error";
+  target.durationMs = performance.now() - started;
+  target.error = `${message} (tras ${MAX_ATTEMPTS} intentos)`;
+  onUpdate([...steps]);
+  throw lastError;
 }
 
 function audioUri(guid: string): string {
   return `s3://audio-original/${guid}.wav`;
 }
 
-export async function runAudioPipeline(
-  audio: Blob,
-  fileName: string,
+async function runAnalysis(
+  steps: PipelineStep[],
+  guid: string,
+  texto: string,
+  textoTranscrito: string,
   options: PipelineOptions,
+  pasos: Partial<Record<PipelineStepId, unknown>>,
   onUpdate: (steps: PipelineStep[]) => void,
-): Promise<PipelineOutput> {
-  const steps = buildSteps(Boolean(options.groundTruth));
-  const pasos: Partial<Record<PipelineStepId, unknown>> = {};
-  onUpdate(steps);
-
-  const ingesta = await runStep(steps, "ingesta", async () => {
-    const form = new FormData();
-    form.append("audio", audio, fileName);
-    form.append("origen", options.origen);
-    if (options.idCaso) form.append("id_caso", options.idCaso);
-    return postForm<IngestaResponse>("/api/ingesta/ingesta", form, TIMEOUT_INGESTA_MS);
-  }, onUpdate);
-  pasos.ingesta = ingesta;
-
-  const guid = ingesta.guid;
-
-  const transcribed = await runStep(
-    steps,
-    "transcripcion",
-    () =>
-      postJson<TranscribeResponse>(
-        "/api/transcripcion/transcribe",
-        {
-          guid,
-          audio_url: audioUri(guid),
-          language: "es",
-        },
-        TIMEOUT_TRANSCRIPCION_MS,
-      ),
-    onUpdate,
-  );
-  pasos.transcripcion = transcribed;
-
-  const texto = transcribed.texto;
-  if (!texto.trim()) {
-    throw new Error("La transcripcion no produjo texto");
-  }
-
+): Promise<TriageResult> {
   const preprocessed = await runStep(
     steps,
     "preprocessing",
@@ -255,12 +239,12 @@ export async function runAudioPipeline(
     probabilidades = predicted.probabilidades ?? {};
     pasos.prediction = predicted;
   } catch {
-    const current = steps.map((s) =>
-      s.id === "prediction"
-        ? { ...s, status: "error" as const, error: "Modelo ML no disponible" }
-        : s,
-    );
-    onUpdate(current);
+    const pred = steps.find((s) => s.id === "prediction");
+    if (pred) {
+      pred.status = "error";
+      pred.error = "Modelo ML no disponible";
+    }
+    onUpdate([...steps]);
   }
 
   let validacion: string | null = null;
@@ -288,9 +272,9 @@ export async function runAudioPipeline(
 
   const triageLlm = isManchesterCode(labeled.triage) ? labeled.triage : null;
 
-  const result: TriageResult = {
+  return {
     guid,
-    textoTranscrito: texto,
+    textoTranscrito,
     textoPreprocesado: cleaned,
     triageLlm,
     justificacion: labeled.justificacion,
@@ -306,6 +290,79 @@ export async function runAudioPipeline(
     motivoFallo,
     sesgoEmocional,
   };
+}
 
+export async function runAudioPipeline(
+  audio: Blob,
+  fileName: string,
+  options: PipelineOptions,
+  onUpdate: (steps: PipelineStep[]) => void,
+): Promise<PipelineOutput> {
+  const steps = buildSteps(AUDIO_STEPS, Boolean(options.groundTruth));
+  const pasos: Partial<Record<PipelineStepId, unknown>> = {};
+  onUpdate(steps);
+
+  const ingesta = await runStep(
+    steps,
+    "ingesta",
+    async () => {
+      const form = new FormData();
+      form.append("audio", audio, fileName);
+      form.append("origen", options.origen);
+      if (options.idCaso) form.append("id_caso", options.idCaso);
+      return postForm<IngestaResponse>("/api/ingesta/ingesta", form, TIMEOUT_INGESTA_MS);
+    },
+    onUpdate,
+  );
+  pasos.ingesta = ingesta;
+  const guid = ingesta.guid;
+
+  const transcribed = await runStep(
+    steps,
+    "transcripcion",
+    () =>
+      postJson<TranscribeResponse>(
+        "/api/transcripcion/transcribe",
+        { guid, audio_url: audioUri(guid), language: "es" },
+        TIMEOUT_TRANSCRIPCION_MS,
+      ),
+    onUpdate,
+  );
+  pasos.transcripcion = transcribed;
+
+  const texto = transcribed.texto;
+  if (!texto.trim()) {
+    throw new Error("La transcripción no produjo texto");
+  }
+
+  const result = await runAnalysis(steps, guid, texto, texto, options, pasos, onUpdate);
+  return { result, pasos };
+}
+
+export async function runTextPipeline(
+  texto: string,
+  options: PipelineOptions,
+  onUpdate: (steps: PipelineStep[]) => void,
+): Promise<PipelineOutput> {
+  const steps = buildSteps(TEXT_STEPS, Boolean(options.groundTruth));
+  const pasos: Partial<Record<PipelineStepId, unknown>> = {};
+  onUpdate(steps);
+
+  const ingesta = await runStep(
+    steps,
+    "ingesta",
+    async () => {
+      const form = new FormData();
+      form.append("texto", texto);
+      form.append("origen", options.origen);
+      if (options.idCaso) form.append("id_caso", options.idCaso);
+      return postForm<IngestaResponse>("/api/ingesta/ingesta", form, TIMEOUT_INGESTA_MS);
+    },
+    onUpdate,
+  );
+  pasos.ingesta = ingesta;
+  const guid = ingesta.guid;
+
+  const result = await runAnalysis(steps, guid, texto, texto, options, pasos, onUpdate);
   return { result, pasos };
 }

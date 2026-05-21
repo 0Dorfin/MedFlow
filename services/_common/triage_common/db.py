@@ -209,6 +209,36 @@ def fetch_resultado_completo(
     return _normalize_jsonb(record)
 
 
+def fetch_historial(
+    limit: int = 50, offset: int = 0, config: DbConfig | None = None
+) -> list[dict[str, Any]]:
+    with get_connection(config) as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT
+                e.GUID_Entrevista,
+                e.ID_CASO,
+                e.Origen,
+                e.Estado,
+                e.Inicio_Solicitud,
+                t.triage_real,
+                t.score_ansiedad,
+                p.prediccion_ia,
+                p.score_ansiedad_ia,
+                p.validacion
+            FROM Entrevista e
+            LEFT JOIN Texto_Procesado t ON e.GUID_Entrevista = t.guid
+            LEFT JOIN Prediccion       p ON e.GUID_Entrevista = p.guid
+            ORDER BY e.Inicio_Solicitud DESC NULLS LAST
+            LIMIT %s OFFSET %s
+            """,
+            (limit, offset),
+        )
+        rows = cur.fetchall()
+        columns = [c.name for c in cur.description]
+        return [dict(zip(columns, row)) for row in rows]
+
+
 def _normalize_jsonb(record: dict[str, Any]) -> dict[str, Any]:
     for key, value in record.items():
         if isinstance(value, str) and key.startswith("entidades"):
