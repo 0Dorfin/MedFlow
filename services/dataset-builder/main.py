@@ -189,18 +189,23 @@ def run(req: BuildRequest) -> BuildResponse:
     )
 
 
+def _entity_term(item):
+    if isinstance(item, dict):
+        return str(item.get("termino_clinico", ""))
+    return str(item)
+
+
 def _as_list(value):
     if value is None:
         return []
-    if isinstance(value, list):
-        return value
     if isinstance(value, str):
         import json
         try:
-            parsed = json.loads(value)
-            return parsed if isinstance(parsed, list) else []
+            value = json.loads(value)
         except (TypeError, ValueError):
             return []
+    if isinstance(value, list):
+        return [t for t in (_entity_term(v) for v in value) if t]
     return []
 
 

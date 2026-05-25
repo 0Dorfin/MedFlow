@@ -136,6 +136,9 @@ async def ingesta(
 
     motor = "airflow" if AIRFLOW_URL else "manual"
 
+    if not (id_caso or "").strip():
+        id_caso = db.next_id_caso()
+
     db.insert_entrevista(
         guid=guid,
         id_caso=id_caso,

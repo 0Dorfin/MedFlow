@@ -12,6 +12,7 @@ from triage_common.contracts import (
     EntrevistaTimestamps,
     LabelRequest,
     LabelResponse,
+    Origen,
     TaskLogEntry,
     TaskStatus,
     TriageLevel,
@@ -63,10 +64,10 @@ def run(req: LabelRequest) -> LabelResponse:
         _log_error(req.guid, started, str(exc))
         raise HTTPException(status_code=502, detail=f"LLM error: {exc}")
 
-    db.upsert_texto_procesado(
-        req.guid,
-        {"triage_real": triage.value, "justificacion_llm": justificacion},
-    )
+    fields = {"justificacion_llm": justificacion}
+    if db.fetch_origen(req.guid) != Origen.WEB.value:
+        fields["triage_real"] = triage.value
+    db.upsert_texto_procesado(req.guid, fields)
 
     finished = datetime.utcnow()
     db.mark_timestamp(req.guid, EntrevistaTimestamps.ETIQUETADO, "fin", when=finished)

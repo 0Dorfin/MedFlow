@@ -14,6 +14,7 @@ x-airflow-common: &airflow-common
     AIRFLOW__API__EXPOSE_CONFIG: "true"
     _PIP_ADDITIONAL_REQUIREMENTS: "apache-airflow-providers-http==5.0.0"
     N8N_ERROR_WEBHOOK: ${N8N_ERROR_WEBHOOK:-http://n8n:5678/webhook/error}
+    CLINICO_EMAIL: ${CLINICO_EMAIL:-}
     PREPROCESSING_URL: http://preprocessing:9101
     TRANSCRIPCION_URL: http://transcripcion:9100
     LLM_EXTRACTION_URL: http://llm-extraction:9110
@@ -96,39 +97,6 @@ services:
     entrypoint: ["/bin/sh", "/scripts/bootstrap-buckets.sh"]
     volumes:
       - ./infra/minio:/scripts:ro
-    networks: [triage_net]
-    restart: "no"
-
-  ollama:
-    image: ollama/ollama:0.4.7
-    container_name: triage_ollama
-    profiles: ["containerized-llm"]
-    restart: unless-stopped
-    ports:
-      - "${OLLAMA_PORT:-11434}:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-    healthcheck:
-      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
-      interval: 15s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
-    networks: [triage_net]
-
-  ollama-init:
-    image: curlimages/curl:8.11.0
-    container_name: triage_ollama_init
-    profiles: ["containerized-llm"]
-    depends_on:
-      ollama:
-        condition: service_healthy
-    environment:
-      OLLAMA_HOST: http://ollama:11434
-      OLLAMA_MODELS: ${OLLAMA_MODELS:-llama3,mistral}
-    entrypoint: ["/bin/sh", "/scripts/pull-models.sh"]
-    volumes:
-      - ./infra/ollama:/scripts:ro
     networks: [triage_net]
     restart: "no"
 
@@ -232,6 +200,8 @@ services:
       N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:-cambia-esta-clave-de-32-caracteres}
       GENERIC_TIMEZONE: Europe/Madrid
       DB_TYPE: sqlite
+      GMAIL_FROM: ${GMAIL_FROM:-}
+      CLINICO_EMAIL: ${CLINICO_EMAIL:-}
     ports:
       - "${N8N_PORT:-5678}:5678"
     volumes:
@@ -288,6 +258,7 @@ services:
         ANXIETY_SCORE_URL: http://anxiety-score:9113
         ML_PREDICTION_URL: http://ml-prediction:9122
         AUDIT_ETHICS_URL: http://audit-ethics:9124
+        N8N_WEBHOOK_BASE: http://n8n:5678/webhook
     container_name: triage_frontend
     restart: unless-stopped
     environment:
@@ -301,6 +272,7 @@ services:
       ANXIETY_SCORE_URL: http://anxiety-score:9113
       ML_PREDICTION_URL: http://ml-prediction:9122
       AUDIT_ETHICS_URL: http://audit-ethics:9124
+      N8N_WEBHOOK_BASE: ${N8N_WEBHOOK_BASE:-http://n8n:5678/webhook}
       NEXT_PROXY_TIMEOUT_MS: ${NEXT_PROXY_TIMEOUT_MS:-600000}
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
@@ -308,28 +280,6 @@ services:
       - api-gateway-ingesta
       - api-gateway-consulta
       - transcripcion
-    networks: [triage_net]
-
-  streamlit-mvp:
-    build:
-      context: .
-      dockerfile: services/streamlit-mvp/Dockerfile
-    container_name: triage_streamlit
-    restart: unless-stopped
-    environment:
-      API_GATEWAY_INGESTA_URL: http://api-gateway-ingesta:8000
-      API_GATEWAY_CONSULTA_URL: http://api-gateway-consulta:8001
-      PREPROCESSING_URL: http://preprocessing:9101
-      LLM_EXTRACTION_URL: http://llm-extraction:9110
-      LLM_NORMALIZATION_URL: http://llm-normalization:9111
-      LLM_LABELING_URL: http://llm-labeling:9112
-      ANXIETY_SCORE_URL: http://anxiety-score:9113
-      ML_PREDICTION_URL: http://ml-prediction:9122
-      EVALUATION_URL: http://evaluation:9123
-      AUDIT_ETHICS_URL: http://audit-ethics:9124
-      TRANSCRIPCION_URL: http://transcripcion:9100
-    ports:
-      - "${STREAMLIT_PORT:-8501}:8501"
     networks: [triage_net]
 
   api-gateway-ingesta:
@@ -410,20 +360,14 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-triage}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-triage_pw}
       POSTGRES_DB: ${POSTGRES_DB:-triage_db}
-      OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
-      LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
+      LLM_PROVIDER: ${LLM_PROVIDER:-openrouter}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OPENROUTER_MODEL: ${OPENROUTER_MODEL:-meta-llama/llama-3.2-3b-instruct:free}
       OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
       LLM_TIMEOUT: ${LLM_TIMEOUT:-120}
       LLM_MAX_RETRIES: ${LLM_MAX_RETRIES:-3}
-      OLLAMA_DEFAULT_MODEL: ${OLLAMA_DEFAULT_MODEL:-qwen3:4b}
-      OLLAMA_TIMEOUT: ${OLLAMA_TIMEOUT:-120}
-      OLLAMA_MAX_RETRIES: ${OLLAMA_MAX_RETRIES:-3}
     ports:
       - "${LLM_EXTRACTION_PORT:-9110}:9110"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy
@@ -441,20 +385,14 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-triage}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-triage_pw}
       POSTGRES_DB: ${POSTGRES_DB:-triage_db}
-      OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
-      LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
+      LLM_PROVIDER: ${LLM_PROVIDER:-openrouter}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OPENROUTER_MODEL: ${OPENROUTER_MODEL:-meta-llama/llama-3.2-3b-instruct:free}
       OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
       LLM_TIMEOUT: ${LLM_TIMEOUT:-120}
       LLM_MAX_RETRIES: ${LLM_MAX_RETRIES:-3}
-      OLLAMA_DEFAULT_MODEL: ${OLLAMA_DEFAULT_MODEL:-qwen3:4b}
-      OLLAMA_TIMEOUT: ${OLLAMA_TIMEOUT:-120}
-      OLLAMA_MAX_RETRIES: ${OLLAMA_MAX_RETRIES:-3}
     ports:
       - "${LLM_NORMALIZATION_PORT:-9111}:9111"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy
@@ -472,20 +410,14 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-triage}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-triage_pw}
       POSTGRES_DB: ${POSTGRES_DB:-triage_db}
-      OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
-      LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
+      LLM_PROVIDER: ${LLM_PROVIDER:-openrouter}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OPENROUTER_MODEL: ${OPENROUTER_MODEL:-meta-llama/llama-3.2-3b-instruct:free}
       OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
       LLM_TIMEOUT: ${LLM_TIMEOUT:-120}
       LLM_MAX_RETRIES: ${LLM_MAX_RETRIES:-3}
-      OLLAMA_DEFAULT_MODEL: ${OLLAMA_DEFAULT_MODEL:-qwen3:4b}
-      OLLAMA_TIMEOUT: ${OLLAMA_TIMEOUT:-120}
-      OLLAMA_MAX_RETRIES: ${OLLAMA_MAX_RETRIES:-3}
     ports:
       - "${LLM_LABELING_PORT:-9112}:9112"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy
@@ -503,20 +435,14 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-triage}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-triage_pw}
       POSTGRES_DB: ${POSTGRES_DB:-triage_db}
-      OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
-      LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
+      LLM_PROVIDER: ${LLM_PROVIDER:-openrouter}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OPENROUTER_MODEL: ${OPENROUTER_MODEL:-meta-llama/llama-3.2-3b-instruct:free}
       OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
       LLM_TIMEOUT: ${LLM_TIMEOUT:-120}
       LLM_MAX_RETRIES: ${LLM_MAX_RETRIES:-3}
-      OLLAMA_DEFAULT_MODEL: ${OLLAMA_DEFAULT_MODEL:-qwen3:4b}
-      OLLAMA_TIMEOUT: ${OLLAMA_TIMEOUT:-120}
-      OLLAMA_MAX_RETRIES: ${OLLAMA_MAX_RETRIES:-3}
     ports:
       - "${ANXIETY_SCORE_PORT:-9113}:9113"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy
@@ -628,6 +554,8 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-triage}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-triage_pw}
       POSTGRES_DB: ${POSTGRES_DB:-triage_db}
+      N8N_ALERTA_WEBHOOK: ${N8N_ALERTA_WEBHOOK:-http://n8n:5678/webhook/alerta-clinica}
+      CLINICO_EMAIL: ${CLINICO_EMAIL:-}
     ports:
       - "${AUDIT_ETHICS_PORT:-9124}:9124"
     depends_on:
@@ -638,7 +566,6 @@ services:
 volumes:
   postgres_data:
   minio_data:
-  ollama_data:
   n8n_data:
 
 networks:

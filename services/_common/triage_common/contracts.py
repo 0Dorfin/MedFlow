@@ -45,6 +45,7 @@ class Origen(str, Enum):
     DATASET = "Dataset"
     SIMULACION = "Simulacion"
     MVP = "MVP"
+    WEB = "Web"
 
 
 class Validacion(str, Enum):

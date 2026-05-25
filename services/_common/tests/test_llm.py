@@ -12,10 +12,11 @@ from triage_common.llm import LLMClient, LLMConfig, LLMError, LLMInvalidJSON
 @pytest.fixture
 def config(tmp_path):
     return LLMConfig(
-        base_url="http://ollama:11434",
-        default_model="llama3",
+        base_url="https://openrouter.ai/api/v1",
+        default_model="meta-llama/llama-3.2-3b-instruct:free",
         timeout_seconds=10.0,
         max_retries=2,
+        api_key="test-key",
     )
 
 
@@ -43,39 +44,55 @@ def _fake_response(json_payload, status_code=200):
     return response
 
 
+def _chat_response(content):
+    return _fake_response({"choices": [{"message": {"content": content}}]})
+
+
 class TestGenerate:
-    def test_returns_response_field(self, llm, fake_client):
-        fake_client.post.return_value = _fake_response({"response": "hola"})
+    def test_returns_message_content(self, llm, fake_client):
+        fake_client.post.return_value = _chat_response("hola")
         out = llm.generate("test prompt")
         assert out == "hola"
         kwargs = fake_client.post.call_args.kwargs
-        assert kwargs["json"]["model"] == "llama3"
-        assert kwargs["json"]["prompt"] == "test prompt"
-        assert kwargs["json"]["stream"] is False
-        assert "format" not in kwargs["json"]
+        assert kwargs["json"]["model"] == "meta-llama/llama-3.2-3b-instruct:free"
+        assert kwargs["json"]["messages"] == [{"role": "user", "content": "test prompt"}]
+        assert "response_format" not in kwargs["json"]
+        assert kwargs["headers"]["Authorization"] == "Bearer test-key"
 
-    def test_sets_json_format(self, llm, fake_client):
-        fake_client.post.return_value = _fake_response({"response": "{}"})
+    def test_sets_json_response_format(self, llm, fake_client):
+        fake_client.post.return_value = _chat_response("{}")
         llm.generate("p", json_mode=True)
         kwargs = fake_client.post.call_args.kwargs
-        assert kwargs["json"]["format"] == "json"
+        assert kwargs["json"]["response_format"] == {"type": "json_object"}
 
     def test_uses_override_model(self, llm, fake_client):
-        fake_client.post.return_value = _fake_response({"response": "ok"})
-        llm.generate("p", model="mistral")
-        assert fake_client.post.call_args.kwargs["json"]["model"] == "mistral"
+        fake_client.post.return_value = _chat_response("ok")
+        llm.generate("p", model="openai/gpt-oss-120b:free")
+        assert fake_client.post.call_args.kwargs["json"]["model"] == "openai/gpt-oss-120b:free"
 
-    def test_raises_on_missing_response_field(self, llm, fake_client):
-        fake_client.post.return_value = _fake_response({"unexpected": "x"})
+    def test_raises_on_missing_choices(self, llm, fake_client):
+        fake_client.post.return_value = _fake_response({"choices": []})
         with pytest.raises(LLMError):
             llm.generate("p")
+
+    def test_raises_without_api_key(self, fake_client, prompts_path):
+        config = LLMConfig(
+            base_url="https://openrouter.ai/api/v1",
+            default_model="m",
+            timeout_seconds=10.0,
+            max_retries=2,
+            api_key=None,
+        )
+        client = LLMClient(config=config, client=fake_client, prompts_dir=prompts_path)
+        with pytest.raises(LLMError):
+            client.generate("p")
 
 
 class TestRetries:
     def test_retries_on_http_error_then_succeeds(self, llm, fake_client):
         fake_client.post.side_effect = [
             httpx.ConnectError("temporarily unavailable"),
-            _fake_response({"response": "ok-after-retry"}),
+            _chat_response("ok-after-retry"),
         ]
         out = llm.generate("p")
         assert out == "ok-after-retry"
@@ -90,14 +107,14 @@ class TestRetries:
 
 class TestGenerateJson:
     def test_parses_json_response(self, llm, fake_client):
-        fake_client.post.return_value = _fake_response(
-            {"response": json.dumps({"entidades": ["disnea", "sincope"]})}
+        fake_client.post.return_value = _chat_response(
+            json.dumps({"entidades": ["disnea", "sincope"]})
         )
         data = llm.generate_json("p")
         assert data == {"entidades": ["disnea", "sincope"]}
 
     def test_raises_on_invalid_json(self, llm, fake_client):
-        fake_client.post.return_value = _fake_response({"response": "not json"})
+        fake_client.post.return_value = _chat_response("not json")
         with pytest.raises(LLMInvalidJSON):
             llm.generate_json("p")
 
@@ -136,20 +153,21 @@ class TestRender:
 
 class TestRenderAndGenerate:
     def test_combines_render_and_call(self, llm, fake_client):
-        fake_client.post.return_value = _fake_response(
-            {"response": json.dumps({"entidades": ["disnea"]})}
+        fake_client.post.return_value = _chat_response(
+            json.dumps({"entidades": ["disnea"]})
         )
         result = llm.render_and_generate_json(
             "extract_entities.j2",
             context={"texto": "me ahogo"},
         )
         assert result == {"entidades": ["disnea"]}
-        assert "me ahogo" in fake_client.post.call_args.kwargs["json"]["prompt"]
+        messages = fake_client.post.call_args.kwargs["json"]["messages"]
+        assert "me ahogo" in messages[0]["content"]
 
 
 class TestListModels:
-    def test_parses_tags_response(self, llm, fake_client):
+    def test_parses_models_response(self, llm, fake_client):
         fake_client.get.return_value = _fake_response(
-            {"models": [{"name": "llama3"}, {"name": "mistral"}]}
+            {"data": [{"id": "model-a"}, {"id": "model-b"}]}
         )
-        assert llm.list_models() == ["llama3", "mistral"]
+        assert llm.list_models() == ["model-a", "model-b"]

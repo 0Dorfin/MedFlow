@@ -23,6 +23,7 @@ SERVICE_URLS = {
 }
 
 N8N_ERROR_WEBHOOK = os.getenv("N8N_ERROR_WEBHOOK", "")
+CLINICO_EMAIL = os.getenv("CLINICO_EMAIL", "")
 
 DEFAULT_DB = {
     "host": os.getenv("POSTGRES_HOST", "postgres"),
@@ -93,7 +94,8 @@ def fetch_entidades_normalizadas(guid: str) -> list[str]:
             "SELECT entidades_normalizadas_es FROM Texto_Procesado WHERE guid = %s", (guid,)
         )
         row = cur.fetchone()
-        return row[0] if row and row[0] else []
+        raw = row[0] if row and row[0] else []
+        return [e["termino_clinico"] if isinstance(e, dict) else e for e in raw]
 
 
 def fetch_triage_real(guid: str) -> Optional[str]:
@@ -143,6 +145,7 @@ def notify_n8n(context: dict, error: BaseException) -> None:
         "guid": (context.get("dag_run").conf or {}).get("guid") if context.get("dag_run") else None,
         "error": str(error),
         "ts": datetime.utcnow().isoformat(),
+        "destinatario": CLINICO_EMAIL,
     }
     try:
         requests.post(N8N_ERROR_WEBHOOK, json=payload, timeout=5)

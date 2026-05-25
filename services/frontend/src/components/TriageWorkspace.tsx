@@ -11,7 +11,6 @@ import { PipelineRail } from "./PipelineRail";
 import { ResultPanel } from "./ResultPanel";
 import { runAudioPipeline, runTextPipeline } from "@/lib/pipeline";
 import type { PipelineOutput, PipelineStep } from "@/lib/types";
-import { isManchesterCode, MANCHESTER_LEVELS, type ManchesterCode } from "@/lib/manchester";
 
 type InputMode = "texto" | "audio";
 
@@ -25,8 +24,6 @@ export function TriageWorkspace() {
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [audioName, setAudioName] = useState("audio.webm");
   const [idCaso, setIdCaso] = useState("");
-  const [origen, setOrigen] = useState("MVP");
-  const [groundTruth, setGroundTruth] = useState<ManchesterCode | "">("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [steps, setSteps] = useState<PipelineStep[]>([]);
@@ -69,8 +66,7 @@ export function TriageWorkspace() {
     setSteps([]);
     const options = {
       idCaso: idCaso.trim() || undefined,
-      origen,
-      groundTruth: groundTruth || undefined,
+      origen: "Web",
     };
     try {
       const data =
@@ -174,62 +170,21 @@ export function TriageWorkspace() {
               )}
             </div>
 
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <div className="grid gap-1.5">
-                <label
-                  htmlFor="id-caso"
-                  className="text-[10px] font-medium uppercase tracking-[0.16em] text-zinc-400 dark:text-zinc-500"
-                >
-                  ID caso (opcional)
-                </label>
-                <input
-                  id="id-caso"
-                  value={idCaso}
-                  onChange={(e) => setIdCaso(e.target.value)}
-                  disabled={loading}
-                  placeholder="ej. RES0001"
-                  className={inputBase}
-                />
-              </div>
-              <div className="grid gap-1.5">
-                <label
-                  htmlFor="origen"
-                  className="text-[10px] font-medium uppercase tracking-[0.16em] text-zinc-400 dark:text-zinc-500"
-                >
-                  Origen
-                </label>
-                <select id="origen" value={origen} onChange={(e) => setOrigen(e.target.value)} disabled={loading} className={inputBase}>
-                  <option value="MVP">MVP</option>
-                  <option value="Simulacion">Simulación</option>
-                  <option value="Dataset">Dataset</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="mt-3 grid gap-1.5">
+            <div className="mt-4 grid gap-1.5">
               <label
-                htmlFor="ground-truth"
+                htmlFor="id-caso"
                 className="text-[10px] font-medium uppercase tracking-[0.16em] text-zinc-400 dark:text-zinc-500"
               >
-                Referencia · ground truth (opcional)
+                ID caso (opcional)
               </label>
-              <select
-                id="ground-truth"
-                value={groundTruth}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  setGroundTruth(v && isManchesterCode(v) ? v : "");
-                }}
+              <input
+                id="id-caso"
+                value={idCaso}
+                onChange={(e) => setIdCaso(e.target.value)}
                 disabled={loading}
+                placeholder="ej. RES0001"
                 className={inputBase}
-              >
-                <option value="">Sin referencia</option>
-                {MANCHESTER_LEVELS.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
 
             <div className="mt-5">

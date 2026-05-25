@@ -10,6 +10,7 @@ const labeling = process.env.LLM_LABELING_URL ?? "http://localhost:9112";
 const anxiety = process.env.ANXIETY_SCORE_URL ?? "http://localhost:9113";
 const prediction = process.env.ML_PREDICTION_URL ?? "http://localhost:9122";
 const audit = process.env.AUDIT_ETHICS_URL ?? "http://localhost:9124";
+const n8n = process.env.N8N_WEBHOOK_BASE ?? "http://localhost:5678/webhook";
 
 const proxyTimeoutMs = Number(process.env.NEXT_PROXY_TIMEOUT_MS ?? 600_000);
 
@@ -30,6 +31,7 @@ const nextConfig: NextConfig = {
       { source: "/api/anxiety/:path*", destination: `${anxiety}/:path*` },
       { source: "/api/prediction/:path*", destination: `${prediction}/:path*` },
       { source: "/api/audit/:path*", destination: `${audit}/:path*` },
+      { source: "/api/n8n/:path*", destination: `${n8n}/:path*` },
     ];
   },
 };

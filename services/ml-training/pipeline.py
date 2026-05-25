@@ -39,13 +39,19 @@ def _ensure_text(value) -> str:
     return str(value)
 
 
+def _entity_term(value) -> str:
+    if isinstance(value, dict):
+        return str(value.get("termino_clinico", ""))
+    return str(value)
+
+
 def _ensure_list(value) -> list[str]:
     if value is None:
         return []
     if isinstance(value, list):
-        return [str(v) for v in value]
+        return [t for t in (_entity_term(v) for v in value) if t]
     if isinstance(value, (np.ndarray,)):
-        return [str(v) for v in value.tolist()]
+        return [t for t in (_entity_term(v) for v in value.tolist()) if t]
     return []
 
 

@@ -21,7 +21,6 @@ DEFAULT_PROMPTS_DIR = Path(os.getenv("PROMPTS_DIR", "/app/data/prompts"))
 
 @dataclass(frozen=True)
 class LLMConfig:
-    provider: str
     base_url: str
     default_model: str
     timeout_seconds: float
@@ -30,22 +29,12 @@ class LLMConfig:
 
     @classmethod
     def from_env(cls) -> "LLMConfig":
-        provider = os.getenv("LLM_PROVIDER", "ollama").lower()
-        if provider == "openrouter":
-            return cls(
-                provider="openrouter",
-                base_url=os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
-                default_model=os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.2-3b-instruct:free"),
-                timeout_seconds=float(os.getenv("LLM_TIMEOUT", "120")),
-                max_retries=int(os.getenv("LLM_MAX_RETRIES", "3")),
-                api_key=os.getenv("OPENROUTER_API_KEY"),
-            )
         return cls(
-            provider="ollama",
-            base_url=os.getenv("OLLAMA_HOST", "http://ollama:11434"),
-            default_model=os.getenv("OLLAMA_DEFAULT_MODEL", "llama3"),
-            timeout_seconds=float(os.getenv("OLLAMA_TIMEOUT", "120")),
-            max_retries=int(os.getenv("OLLAMA_MAX_RETRIES", "3")),
+            base_url=os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
+            default_model=os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.2-3b-instruct:free"),
+            timeout_seconds=float(os.getenv("LLM_TIMEOUT", "120")),
+            max_retries=int(os.getenv("LLM_MAX_RETRIES", "3")),
+            api_key=os.getenv("OPENROUTER_API_KEY"),
         )
 
 
@@ -84,30 +73,17 @@ class LLMClient:
         model: Optional[str] = None,
         json_mode: bool = False,
         options: Optional[dict[str, Any]] = None,
-        think: bool = False,
     ) -> str:
-        if self._config.provider == "openrouter":
-            payload: dict[str, Any] = {
-                "model": model or self._config.default_model,
-                "messages": [{"role": "user", "content": prompt}],
-                "temperature": (options or {}).get("temperature", 0.1),
-            }
-            if json_mode:
-                payload["response_format"] = {"type": "json_object"}
-            if options and "max_tokens" in options:
-                payload["max_tokens"] = options["max_tokens"]
-            return self._call_openrouter(payload)
-        payload = {
+        payload: dict[str, Any] = {
             "model": model or self._config.default_model,
-            "prompt": prompt,
-            "stream": False,
-            "think": think,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": (options or {}).get("temperature", 0.1),
         }
         if json_mode:
-            payload["format"] = "json"
-        if options:
-            payload["options"] = options
-        return self._call_generate(payload)
+            payload["response_format"] = {"type": "json_object"}
+        if options and "max_tokens" in options:
+            payload["max_tokens"] = options["max_tokens"]
+        return self._call_openrouter(payload)
 
     def generate_json(
         self,
@@ -143,43 +119,16 @@ class LLMClient:
         return self.generate_json(prompt=prompt, model=model, options=options)
 
     def list_models(self) -> list[str]:
-        if self._config.provider == "openrouter":
-            response = self._client.get(
-                f"{self._config.base_url}/models",
-                headers={"Authorization": f"Bearer {self._config.api_key or ''}"},
-            )
-            response.raise_for_status()
-            data = response.json()
-            return [m.get("id", "") for m in data.get("data", [])]
-        response = self._client.get(f"{self._config.base_url}/api/tags")
+        response = self._client.get(
+            f"{self._config.base_url}/models",
+            headers={"Authorization": f"Bearer {self._config.api_key or ''}"},
+        )
         response.raise_for_status()
         data = response.json()
-        return [model["name"] for model in data.get("models", [])]
+        return [m.get("id", "") for m in data.get("data", [])]
 
     def close(self) -> None:
         self._client.close()
-
-    def _call_generate(self, payload: dict[str, Any]) -> str:
-        attempts = max(1, self._config.max_retries)
-
-        @retry(
-            reraise=True,
-            stop=stop_after_attempt(attempts),
-            wait=wait_exponential(multiplier=1, min=1, max=10),
-            retry=retry_if_exception_type((httpx.HTTPError,)),
-        )
-        def _do_call() -> str:
-            response = self._client.post(
-                f"{self._config.base_url}/api/generate",
-                json=payload,
-            )
-            response.raise_for_status()
-            data = response.json()
-            if "response" not in data:
-                raise LLMError(f"Respuesta Ollama sin campo 'response': {data}")
-            return str(data["response"])
-
-        return _do_call()
 
     def _call_openrouter(self, payload: dict[str, Any]) -> str:
         if not self._config.api_key:

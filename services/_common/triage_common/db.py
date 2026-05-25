@@ -89,6 +89,22 @@ def insert_entrevista(
         )
 
 
+def next_id_caso(prefix: str = "WEB", config: DbConfig | None = None) -> str:
+    today = datetime.utcnow().strftime("%Y%m%d")
+    like = f"{prefix}-{today}-%"
+    with get_connection(config) as conn, conn.cursor() as cur:
+        cur.execute("SELECT COUNT(*) FROM Entrevista WHERE ID_CASO LIKE %s", (like,))
+        n = cur.fetchone()[0] + 1
+    return f"{prefix}-{today}-{n:03d}"
+
+
+def fetch_origen(guid: str, config: DbConfig | None = None) -> Optional[str]:
+    with get_connection(config) as conn, conn.cursor() as cur:
+        cur.execute("SELECT Origen FROM Entrevista WHERE GUID_Entrevista = %s", (guid,))
+        row = cur.fetchone()
+        return row[0] if row else None
+
+
 def update_entrevista_estado(
     guid: str,
     estado: EntrevistaEstado | str,

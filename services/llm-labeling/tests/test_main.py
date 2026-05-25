@@ -34,6 +34,7 @@ def test_health(patched):
 
 def test_run_returns_triage_c2(patched):
     main, db_mock, client_mock = patched
+    db_mock.fetch_origen.return_value = "Dataset"
     client_mock.render_and_generate_json.return_value = {
         "triage": "C2",
         "justificacion": "Dolor toracico opresivo: Manchester C2.",
@@ -54,6 +55,29 @@ def test_run_returns_triage_c2(patched):
     args = db_mock.upsert_texto_procesado.call_args
     assert args.args[0] == "g1"
     assert args.args[1]["triage_real"] == "C2"
+
+
+def test_run_web_skips_triage_real(patched):
+    main, db_mock, client_mock = patched
+    db_mock.fetch_origen.return_value = "Web"
+    client_mock.render_and_generate_json.return_value = {
+        "triage": "C2",
+        "justificacion": "Dolor toracico opresivo: Manchester C2.",
+    }
+    response = TestClient(main.app).post(
+        "/run",
+        json={
+            "guid": "gweb",
+            "resumen_es": "Paciente con dolor toracico opresivo.",
+            "entidades_normalizadas": [VALID_ENTITY],
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["triage"] == "C2"
+
+    fields = db_mock.upsert_texto_procesado.call_args.args[1]
+    assert "triage_real" not in fields
+    assert fields["justificacion_llm"] == "Dolor toracico opresivo: Manchester C2."
 
 
 def test_run_rejects_invalid_triage(patched):

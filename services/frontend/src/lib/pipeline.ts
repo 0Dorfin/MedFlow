@@ -148,6 +148,24 @@ function audioUri(guid: string): string {
   return `s3://audio-original/${guid}.wav`;
 }
 
+async function notifyTriajeUrgente(body: {
+  guid: string;
+  id_caso: string | null;
+  clasificacion: ManchesterCode;
+  score_ansiedad_ia: number | null;
+  resumen: string;
+}): Promise<void> {
+  try {
+    await fetch("/api/n8n/triaje-procesado", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    return;
+  }
+}
+
 async function runAnalysis(
   steps: PipelineStep[],
   guid: string,
@@ -245,6 +263,16 @@ async function runAnalysis(
       pred.error = "Modelo ML no disponible";
     }
     onUpdate([...steps]);
+  }
+
+  if (prediccionIa === "C1" || prediccionIa === "C2") {
+    void notifyTriajeUrgente({
+      guid,
+      id_caso: options.idCaso ?? null,
+      clasificacion: prediccionIa,
+      score_ansiedad_ia: scoreAnsiedadIa,
+      resumen: cleaned,
+    });
   }
 
   let validacion: string | null = null;

@@ -1,169 +1,320 @@
-# TriageIA — Sistema de Triaje Manchester con LLM + Machine Learning
+# TriageIA - Triaje Manchester con LLM + Machine Learning
 
-> Proyecto 3 · Curso de especialización IA-BD 25/26
-> Equipos de 2 alumnos · 4 semanas (mayo 2026)
+Sistema que clasifica la urgencia clínica de un paciente (nivel Manchester **C1-C5**) a partir de su texto o audio. Enriquece con un LLM (extracción de síntomas, normalización, etiquetado, score de ansiedad), entrena un modelo de Machine Learning con esas etiquetas y, en producción, predice el nivel de nuevos casos. Incluye un bucle de **auditoría ética** que detecta subestimaciones de gravedad en pacientes con alta carga emocional.
 
-Sistema de procesamiento de texto/audio orquestado con **n8n + Apache Airflow** que toma la voz de un paciente, extrae síntomas mediante un LLM local (**Ollama**), los normaliza contra un diccionario clínico cerrado y predice un **nivel de triage Manchester (C1–C5)** con un modelo de Machine Learning, todo trazado mediante un identificador único (`GUID_Entrevista`) y almacenado en **Postgres + minIO/S3**.
-
-Basado en el corpus **Fareez et al. (2022)** — 272 entrevistas OSCE publicadas en *Scientific Data (Nature)*.
+El pipeline se orquesta con **Apache Airflow** (procesamiento batch) y **n8n** (alertas y notificaciones), sobre microservicios **FastAPI**, **Postgres** y **minIO**.
 
 ---
 
-## Arquitectura (vista rápida)
+## Tabla de contenidos
 
-| Componente | Tecnología | Puerto |
-|---|---|---|
-| Orquestador batch | Apache Airflow 2.10 (LocalExecutor) | `8080` |
-| Orquestador webhooks / notificaciones | n8n 1.74 | `5678` |
-| Base de datos | Postgres 15 | `5432` |
-| Almacén de objetos | minIO (S3-compatible) | API `9000`, consola `9001` |
-| LLM local | Ollama (`llama3`, `mistral`) | `11434` |
-| Transcripción audio → texto | faster-whisper (FastAPI) | `9100` |
-| Dashboard MVP | Streamlit | `8501` |
-
-Diagrama detallado y descripción de DAGs/flujos en [`docs/arquitectura.md`](docs/arquitectura.md) *(pendiente — Iteración 7)*.
+1. [Pipeline](#pipeline)
+2. [Requisitos](#requisitos)
+3. [Cómo ejecutar](#cómo-ejecutar)
+4. [Flujo de prueba](#flujo-de-prueba)
+5. [Comandos útiles](#comandos-útiles)
+6. [Stack tecnológico](#stack-tecnológico)
+7. [Servicios](#servicios)
+8. [Orquestación: Airflow y n8n](#orquestación-airflow-y-n8n)
+9. [Variables de entorno](#variables-de-entorno)
+10. [Documentación](#documentación)
+11. [Estructura del repositorio](#estructura-del-repositorio)
 
 ---
 
-## Quickstart
+## Pipeline
 
-### 1. Requisitos
-
-- Docker Engine ≥ 24 con Docker Compose v2
-- 16 GB de RAM libres (Ollama + Whisper son los más pesados)
-- ~10 GB de disco para los modelos LLM (`llama3` ~4.7 GB, `mistral` ~4.1 GB)
-
-### 2. Configurar variables
-
-```bash
-cp .env.example .env
-# Edita .env para ajustar contraseñas, AIRFLOW_UID (en Linux: `id -u`), modelos LLM...
+```
+texto / audio
+  └─► api-gateway-ingesta                          Estado: RECIBIDO
+        └─► Fase 1 (DAG Airflow):
+              (transcripción si es audio)
+              traducción/resumen → preprocesado →
+              extracción → normalización →
+              etiquetado (triage_real) → score de ansiedad
+                                                   Estado: TEXTO_ENRIQUECIDO
+        └─► dataset-builder → ml-training          modelo en minIO
+        └─► ml-prediction    (prediccion_ia)       Estado: PREDICHO
+        └─► evaluation       (validación)          Estado: EVALUADO
+        └─► audit-ethics     (auditoría ética)     Estado: AUDITADO
+              └─► si hay sesgo emocional → n8n → email
 ```
 
-> **AIRFLOW_UID:** en Linux pon el resultado de `id -u` (típicamente `1000`); en macOS/Windows deja `50000`.
+Detalle del flujo y estados en `[docs/servicios.md](docs/servicios.md)`; arquitectura en `[docs/arquitectura.md](docs/arquitectura.md)`.
 
-### 3. Levantar el stack
+---
 
-```bash
-docker compose up -d
-```
+## Requisitos
 
-La primera vez tarda varios minutos:
-- Postgres ejecuta `infra/postgres/00-create-airflow-db.sh` + `01-init-triage.sql` (esquema completo).
-- minIO arranca y `minio-bootstrap` crea los buckets (`audio-original`, `textos-originales`, `datasets`, `modelos`).
-- Ollama arranca y `ollama-init` descarga los modelos (~9 GB en disco).
-- Airflow migra su BD y crea el usuario admin.
+- Docker y Docker Compose.
+- Una `OPENROUTER_API_KEY` (proveedor LLM).
 
-Comprueba el estado con:
+---
+
+## Cómo ejecutar
 
 ```bash
-docker compose ps
+cp .env.example .env        # rellena OPENROUTER_API_KEY y las credenciales
+docker compose up -d        # levanta toda la plataforma
+docker compose ps           # comprueba el estado
 ```
 
-### 4. Acceder a las interfaces
+Accesos una vez arrancado:
 
-| Servicio | URL | Credenciales |
-|---|---|---|
-| Airflow | http://localhost:8080 | `admin / admin` (de `.env`) |
-| n8n | http://localhost:5678 | `admin / admin` (de `.env`) |
-| minIO consola | http://localhost:9001 | `minio_admin / minio_admin_pw` (de `.env`) |
-| Streamlit MVP | http://localhost:8501 | — |
-| Ollama API | http://localhost:11434/api/tags | — |
-| Transcripción | http://localhost:9100/health | — |
 
-### 5. Verificar que todo funciona
+| Servicio        | URL                                            |
+| --------------- | ---------------------------------------------- |
+| Frontend        | [http://localhost:3000](http://localhost:3000) |
+| Airflow         | [http://localhost:8080](http://localhost:8080) |
+| n8n             | [http://localhost:5678](http://localhost:5678) |
+| minIO (consola) | [http://localhost:9001](http://localhost:9001) |
+| API ingesta     | [http://localhost:8000](http://localhost:8000) |
+| API consulta    | [http://localhost:8001](http://localhost:8001) |
+
+
+Las credenciales de Airflow, n8n y minIO se definen en `.env` (ver `.env.example`).
+
+El mapa completo de puertos está en `[docs/arquitectura.md](docs/arquitectura.md)`.
+
+---
+
+## Flujo de prueba
 
 ```bash
-# Postgres: tablas creadas
-docker compose exec postgres psql -U triage -d triage_db -c '\dt'
+# 1. Ingesta de un caso de texto (origen: Dataset | Simulacion | MVP | Web)
+curl -X POST http://localhost:8000/ingesta \
+  -F "texto=Me falta el aire y siento que me muero" \
+  -F "id_caso=RES0001" \
+  -F "origen=Simulacion"
+# → { "guid": "<GUID>", "estado": "RECIBIDO", "workflow_id": "<run_id>" }
 
-# minIO: buckets creados
-docker compose exec minio-bootstrap mc ls triage/ 2>/dev/null || \
-  docker compose run --rm minio-bootstrap
+# 2. Seguir el progreso del caso en Airflow (http://localhost:8080)
+#    o consultar el resultado completo cuando termine el pipeline:
+curl http://localhost:8001/resultado/<GUID>
 
-# Ollama: modelos descargados
-curl -s http://localhost:11434/api/tags | python3 -m json.tool
-
-# Airflow: DAG de humo
-# (en la UI, activa y dispara `smoke_test`)
-
-# Whisper: salud
-curl -s http://localhost:9100/health
+# 3. Lista de los últimos casos procesados
+curl "http://localhost:8001/historial?limit=20"
 ```
+
+También puedes lanzar un caso desde el frontend ([http://localhost:3000](http://localhost:3000)).
+
+---
+
+## Comandos útiles
+
+```bash
+docker compose logs -f llm-labeling        # logs de un servicio concreto
+docker compose up -d --build ml-training   # reconstruir un servicio tras cambios
+docker compose down -v                     # parar y borrar volúmenes
+
+pytest services/llm-labeling/tests/        # tests de un microservicio
+pytest services/_common/tests/             # tests de la librería común
+```
+
+---
+
+## Stack tecnológico
+
+
+| Componente                  | Tecnología                                                                         |
+| --------------------------- | ---------------------------------------------------------------------------------- |
+| Lenguaje servicios          | Python 3.11                                                                        |
+| API microservicios          | FastAPI                                                                            |
+| Frontend                    | Next.js 16 · React 19 · TypeScript · Tailwind 4                                    |
+| Orquestación batch          | Apache Airflow 3.0.5 (LocalExecutor)                                               |
+| Automatización event-driven | n8n 1.74.1                                                                         |
+| LLM                         | OpenRouter (`openai/gpt-oss-120b:free`) · prompts Jinja2 · reintentos `tenacity`   |
+| Transcripción audio         | faster-whisper                                                                     |
+| Detección de idioma         | langdetect                                                                         |
+| Machine Learning            | scikit-learn (TF-IDF + LogisticRegression/RandomForest/GradientBoosting), `joblib` |
+| Base de datos               | PostgreSQL 15 (`psycopg2`)                                                         |
+| Almacenamiento objetos      | minIO (compatible S3, cliente `minio`)                                             |
+| Contenedores                | Docker Compose                                                                     |
+
+
+---
+
+## Servicios
+
+14 microservicios. Detalle completo (entradas/salidas, escrituras en BD) en [docs/servicios.md](docs/servicios.md).
+
+
+| Servicio             | Puerto | Qué hace                                                                      |
+| -------------------- | ------ | ----------------------------------------------------------------------------- |
+| api-gateway-ingesta  | 8000   | Puerta de entrada: recibe texto/audio, genera GUID, dispara el DAG de Fase 1. |
+| api-gateway-consulta | 8001   | Lectura del resultado completo de un caso.                                    |
+| transcripcion        | 9100   | Audio → texto (faster-whisper).                                               |
+| preprocessing        | 9101   | Limpieza y normalización del texto.                                           |
+| llm-extraction       | 9110   | Extrae síntomas y traduce/resume a español clínico.                           |
+| llm-normalization    | 9111   | Mapea los síntomas al diccionario Manchester cerrado.                         |
+| llm-labeling         | 9112   | Asigna el nivel Manchester (`triage_real`) + justificación.                   |
+| anxiety-score        | 9113   | Calcula el score de ansiedad (0-1).                                           |
+| dataset-builder      | 9120   | Exporta los datasets de entrenamiento/validación a minIO.                     |
+| ml-training          | 9121   | Entrena el clasificador y guarda modelo + métricas.                           |
+| ml-prediction        | 9122   | Predice el nivel Manchester (`prediccion_ia`).                                |
+| evaluation           | 9123   | Compara predicción contra etiqueta de referencia.                             |
+| audit-ethics         | 9124   | Auditoría ética: detecta sesgo emocional y dispara alerta.                    |
+| frontend             | 3000   | Dashboard Next.js: bandeja de casos, detalle, ingesta, métricas.              |
+
+
+---
+
+## Orquestación: Airflow y n8n
+
+**Airflow** mueve cada caso por las fases (llamadas HTTP `POST /run` a los servicios). DAGs en `airflow/dags/`:
+
+
+| DAG                      | Disparo   | Qué hace                                                                                  |
+| ------------------------ | --------- | ----------------------------------------------------------------------------------------- |
+| `dag_text_ingestion`     | manual    | Fase 1 (texto): resumen → preprocesado → extracción → normalización → etiquetado → score. |
+| `dag_audio_ingestion`    | manual    | Igual + transcripción al inicio.                                                          |
+| `dag_llm_enrichment`     | `@hourly` | Recoge casos `RECIBIDO` y lanza Fase 1 por cada uno.                                      |
+| `dag_model_training`     | `@daily`  | build_dataset → entrena → recarga el predictor.                                           |
+| `dag_prediction_phase_2` | manual    | Predice un caso enriquecido.                                                              |
+| `dag_evaluation`         | `@hourly` | Valida los casos `PREDICHO`.                                                              |
+| `dag_audit_ethics`       | `@hourly` | Audita los `EVALUADO` y alerta si hay sesgo.                                              |
+
+
+**n8n** reacciona a eventos puntuales. Workflows en `n8n/workflows/`:
+
+
+| Workflow                   | Disparo                           | Qué hace                           |
+| -------------------------- | --------------------------------- | ---------------------------------- |
+| `error_notification`       | fallo de un DAG                   | Email de alerta técnica.           |
+| `webhook_alerta_clinica`   | sesgo emocional en `audit-ethics` | Email HTML al clínico vía Gmail.   |
+| `webhook_triaje_procesado` | caso procesado                    | Email con el resultado del triaje. |
+
+
+---
+
+## Variables de entorno
+
+Plantilla completa en `.env.example`. Las principales:
+
+
+| Grupo         | Variables                                                                                             |
+| ------------- | ----------------------------------------------------------------------------------------------------- |
+| LLM           | `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, `LLM_TIMEOUT`, `LLM_MAX_RETRIES`                            |
+| Postgres      | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`                                                   |
+| minIO         | `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`, `MINIO_BUCKETS`                                             |
+| Airflow       | `AIRFLOW_ADMIN_USER`, `AIRFLOW_ADMIN_PASSWORD`, `AIRFLOW_JWT_SECRET`                                  |
+| n8n           | `N8N_BASIC_AUTH_USER`, `N8N_BASIC_AUTH_PASSWORD`, `N8N_ENCRYPTION_KEY`, `GMAIL_FROM`, `CLINICO_EMAIL` |
+| Transcripción | `WHISPER_MODEL`, `WHISPER_DEVICE`, `WHISPER_COMPUTE_TYPE`                                             |
+
+
+---
+
+## Documentación
+
+
+| Documento                                            | Contenido                                                                                          |
+| ---------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `[docs/arquitectura.md](docs/arquitectura.md)`       | Diagrama de contenedores, decisiones de diseño, stack y puertos.                                   |
+| `[docs/servicios.md](docs/servicios.md)`             | Referencia detallada de cada microservicio, modelo de datos, DAGs y flujo end-to-end.              |
+| `[docs/dominio-clinico.md](docs/dominio-clinico.md)` | Niveles Manchester, grupos clínicos, diccionario de síntomas, score de ansiedad y auditoría ética. |
+| `[docs/modelo-ml.md](docs/modelo-ml.md)`             | Dataset, features, algoritmos, métricas y guardado/carga del modelo.                               |
+| `[docs/gestion-errores.md](docs/gestion-errores.md)` | Reintentos, registro en Postgres, notificación n8n y recuperación.                                 |
+| `[docs/flujo-n8n.md](docs/flujo-n8n.md)`             | Workflows de n8n.                                                                                  |
+
 
 ---
 
 ## Estructura del repositorio
 
 ```
-proyecto_triage_6/
-├── docker-compose.yml          # 12 servicios coordinados
-├── .env.example                # plantilla de variables
-├── infra/
-│   ├── postgres/               # init.sql + script crear DB airflow
-│   ├── minio/                  # bootstrap-buckets.sh
-│   └── ollama/                 # pull-models.sh
-├── services/                   # microservicios FastAPI
-│   ├── transcripcion/          # Whisper (audio → texto) - Iter 0
-│   ├── streamlit-mvp/          # dashboard sanitario - Iter 0 (placeholder)
-│   ├── api-gateway-ingesta/    # Iter 2
-│   ├── llm-extraction/         # Iter 2
-│   ├── llm-normalization/      # Iter 2
-│   ├── llm-labeling/           # Iter 2
-│   ├── anxiety-score/          # Iter 2
-│   ├── ml-training/            # Iter 2
-│   ├── ml-prediction/          # Iter 2
-│   ├── evaluation/             # Iter 2
-│   ├── audit-ethics/           # Iter 2 — under-triage detection
-│   └── _common/                # contratos Pydantic, clientes
-├── airflow/dags/               # DAGs del pipeline ⏳ Iter 3
-├── n8n/workflows/              # webhooks Fase 2 ⏳ Iter 4
+triaje_urgencias/
+├── docker-compose.yml              # Orquestación de todos los contenedores
+├── .env.example                    # Plantilla de variables de entorno
+├── README.md
+│
+├── docs/                           # Documentación
+│   ├── arquitectura.md
+│   ├── servicios.md
+│   ├── dominio-clinico.md
+│   ├── modelo-ml.md
+│   ├── gestion-errores.md
+│   └── flujo-n8n.md
+│
 ├── data/
 │   ├── dictionaries/
-│   │   └── manchester_terms.csv  # diccionario clínico cerrado
-│   ├── prompts/                # plantillas LLM - Iter 1
-│   ├── samples/                # audios y textos de prueba
-│   └── fareez_dataset/         # mirror del corpus - Iter 5
-├── scripts/                    # download_fareez.py, seed_postgres.py ⏳ Iter 5
-└── tests/{unit,integration,e2e}/
+│   │   └── manchester_terms.csv    # Diccionario cerrado de síntomas (112 términos)
+│   ├── prompts/                    # Plantillas Jinja2 de los prompts LLM
+│   │   ├── extract_entities.j2
+│   │   ├── normalize_entities.j2
+│   │   ├── label_triage.j2
+│   │   └── translate_summarize.j2
+│   ├── fareez_dataset/             # Corpus de transcripciones clínicas (Fareez et al.)
+│   │   └── transcripts/
+│   └── samples/
+│
+├── infra/                          # Scripts de inicialización de la infraestructura
+│   ├── postgres/
+│   │   ├── 00-create-airflow-db.sh
+│   │   └── 01-init-triage.sql      # Esquema: Entrevista, Texto_Procesado, Prediccion, Task_Log + vistas
+│   ├── minio/
+│   │   └── bootstrap-buckets.sh    # Crea los buckets de minIO
+│   └── n8n/
+│       └── import-workflows.sh     # Importa los workflows de n8n
+│
+├── airflow/
+│   ├── dags/                       # DAGs del pipeline
+│   │   ├── dag_text_ingestion.py   # Fase 1 (texto)
+│   │   ├── dag_audio_ingestion.py  # Fase 1 (audio: + transcripción)
+│   │   ├── dag_llm_enrichment.py   # Batch: enriquece casos RECIBIDO
+│   │   ├── dag_model_training.py   # Construye dataset + entrena + recarga modelo
+│   │   ├── dag_prediction_phase_2.py
+│   │   ├── dag_evaluation.py       # Batch: valida predicciones
+│   │   ├── dag_audit_ethics.py     # Batch: auditoría ética + alerta
+│   │   └── triage_helpers.py       # Helpers comunes (post_json, reintentos, callback n8n)
+│   ├── config/
+│   └── logs/
+│
+├── n8n/
+│   └── workflows/
+│       ├── error_notification.json       # Alerta técnica ante fallo de Airflow
+│       ├── webhook_alerta_clinica.json   # Alerta clínica por sesgo emocional
+│       └── webhook_triaje_procesado.json # Alerta clínica para casos urgentes C1 o C2
+│
+├── services/
+│   ├── _common/                    # Librería compartida
+│   │   ├── triage_common/
+│   │   │   ├── contracts.py        # Modelos Pydantic, enums (TriageLevel, GrupoClinico...)
+│   │   │   ├── db.py               # Cliente Postgres + helpers
+│   │   │   ├── storage.py          # Cliente minIO tipado por bucket
+│   │   │   ├── llm.py              # Cliente LLM (OpenRouter) + Jinja2
+│   │   │   └── dictionary.py       # Carga y normalización del diccionario Manchester
+│   │   ├── tests/
+│   │   └── pyproject.toml
+│   │
+│   ├── api-gateway-ingesta/        # :8000 Entrada de casos, dispara DAG
+│   ├── api-gateway-consulta/       # :8001 Lectura de resultados
+│   ├── transcripcion/              # :9100 Audio → texto (faster-whisper)
+│   ├── preprocessing/              # :9101 Limpieza de texto
+│   ├── llm-extraction/             # :9110 Extracción de síntomas + traducción/resumen
+│   ├── llm-normalization/          # :9111 Mapeo al diccionario cerrado
+│   ├── llm-labeling/               # :9112 Etiquetado Manchester (triage_real)
+│   ├── anxiety-score/              # :9113 Score de ansiedad (lexicón + LLM)
+│   ├── dataset-builder/            # :9120 Construye datasets Parquet en minIO
+│   ├── ml-training/                # :9121 Entrena el clasificador
+│   ├── ml-prediction/              # :9122 Predice el nivel (prediccion_ia)
+│   ├── evaluation/                 # :9123 Valida predicción vs etiqueta
+│   ├── audit-ethics/               # :9124 Auditoría ética + alerta n8n
+│   └── frontend/                   # :3000 Dashboard Next.js
+│       ├── Dockerfile
+│       ├── package.json
+│       └── src/
+│           ├── app/                # Páginas (bandeja, historial)
+│           ├── components/
+│           └── lib/
+│
+├── scripts/                        # Operación y mantenimiento de datos
+│   ├── seed_postgres.py            # Carga de datos de prueba
+│   ├── predict_batch.py
+│   ├── recompute_anxiety.py
+│   ├── recompute_normalization.py
+│   ├── retry_stuck.py              # Reintenta casos atascados
+│
+└── notebooks/
+    └── ml_exploration.ipynb        # Exploración del modelo
 ```
 
----
-
-## Niveles Manchester
-
-| Nivel | Color | Tiempo máx. | Descripción |
-|---|---|---|---|
-| C1 | Rojo | 0 min | Emergencia |
-| C2 | Naranja | 10 min | Muy urgente |
-| C3 | Amarillo | 60 min | Urgente |
-| C4 | Verde | 120 min | Menos urgente |
-| C5 | Azul | 240 min | No urgente |
-
-**Objetivo cuantitativo:** `Recall(C1) ≥ 0.85` y `Recall(C2) ≥ 0.80` sobre el conjunto de prueba.
-
----
-
-## Plan de iteraciones
-
-El plan completo (con estado actual de cada iteración) está en [`docs/plan.md`](docs/plan.md). Resumen:
-
-| Iter | Contenido | Estado |
-|---|---|---|
-| 0 | Esqueleto e infraestructura (este README) | completado |
-| 1 | Librería común, contratos Pydantic, diccionario, prompts LLM | pendiente |
-| 2 | Microservicios FastAPI (10) + Streamlit | pendiente |
-| 3 | DAGs Airflow (audio, texto, training, evaluación, auditoría) | pendiente |
-| 4 | Flujos n8n (webhook Fase 2, notificaciones) | pendiente |
-| 5 | Dataset Fareez et al. + entrenamiento modelo ML | pendiente |
-| 6 | Tests de integración y E2E | pendiente |
-| 7 | Documentación final + MVP Streamlit completo + presentación | pendiente |
-
----
-
-## Parar / limpiar
-
-```bash
-docker compose down                  # para los servicios, conserva datos
-docker compose down -v               # ATENCION: borra también volúmenes (modelos, BD)
-```

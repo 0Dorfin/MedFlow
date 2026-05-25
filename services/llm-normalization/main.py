@@ -99,8 +99,8 @@ def run(req: NormalizeRequest) -> NormalizeResponse:
                 continue
             mapeados.append(_entity_from_term(termino, sintoma))
 
-    persisted_terms = [m.termino_clinico for m in mapeados]
-    db.upsert_texto_procesado(req.guid, {"entidades_normalizadas_es": persisted_terms})
+    persisted_entities = [m.model_dump(mode="json") for m in mapeados]
+    db.upsert_texto_procesado(req.guid, {"entidades_normalizadas_es": persisted_entities})
 
     finished = datetime.utcnow()
     db.mark_timestamp(req.guid, EntrevistaTimestamps.NORMALIZACION, "fin", when=finished)
@@ -114,7 +114,7 @@ def run(req: NormalizeRequest) -> NormalizeResponse:
             timestamp_fin=finished,
             status=TaskStatus.OK,
             payload_resultado={
-                "entidades_normalizadas": persisted_terms,
+                "entidades_normalizadas": persisted_entities,
                 "no_mapeadas": no_mapeadas_final,
             },
         )

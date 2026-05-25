@@ -90,11 +90,14 @@ def test_run_rejects_invented_terms(patched):
     assert body["no_mapeadas"] == ["raro"]
 
 
-def test_run_persists_clinical_terms_only(patched):
+def test_run_persists_full_entities(patched):
     main, db_mock, client_mock = patched
     TestClient(main.app).post(
         "/run", json={"guid": "g4", "entidades_extraidas": ["me ahogo"]}
     )
     args = db_mock.upsert_texto_procesado.call_args
     assert args.args[0] == "g4"
-    assert args.args[1]["entidades_normalizadas_es"] == ["disnea"]
+    persisted = args.args[1]["entidades_normalizadas_es"]
+    assert [e["termino_clinico"] for e in persisted] == ["disnea"]
+    assert persisted[0]["grupo_clinico"] == "RES"
+    assert persisted[0]["prioridad_sugerida"] in {"C1", "C2"}

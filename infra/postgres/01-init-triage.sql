@@ -1,7 +1,7 @@
 CREATE TABLE IF NOT EXISTS Entrevista (
     GUID_Entrevista              VARCHAR(255) PRIMARY KEY,
     ID_CASO                      VARCHAR(50),
-    Origen                       VARCHAR(20)  CHECK (Origen IN ('Dataset','Simulacion','MVP')),
+    Origen                       VARCHAR(20)  CHECK (Origen IN ('Dataset','Simulacion','MVP','Web')),
     URL_Audio_Original           VARCHAR(255),
     URL_Texto_Original           VARCHAR(255),
     URL_Dataset_Generado         VARCHAR(255),
@@ -91,3 +91,31 @@ SELECT
 FROM Entrevista e
 LEFT JOIN Texto_Procesado t ON e.GUID_Entrevista = t.guid
 LEFT JOIN Prediccion       p ON e.GUID_Entrevista = p.guid;
+
+CREATE OR REPLACE VIEW v_auditoria_clinica AS
+SELECT
+    e.ID_CASO AS id_caso,
+    CASE
+        WHEN UPPER(LEFT(e.ID_CASO, 3)) IN ('RES', 'MSK', 'CAR', 'GAS') THEN UPPER(LEFT(e.ID_CASO, 3))
+        WHEN e.ID_CASO IS NOT NULL THEN 'OTRO'
+        ELSE NULL
+    END AS grupo_clinico,
+    p.validacion AS desviacion,
+    t.triage_real,
+    p.prediccion_ia,
+    p.score_ansiedad_ia,
+    p.motivo_fallo,
+    p.accion_correctiva,
+    CASE
+        WHEN p.motivo_fallo ILIKE '%sesgo emocional%' THEN 'RECHAZADO'
+        WHEN p.validacion = 'Under-triage' THEN 'REVISAR'
+        WHEN p.validacion = 'Over-triage' THEN 'ACEPTABLE'
+        ELSE 'PENDIENTE'
+    END AS estatus,
+    p.fecha
+FROM Prediccion p
+JOIN Entrevista e ON e.GUID_Entrevista = p.guid
+LEFT JOIN Texto_Procesado t ON t.guid = p.guid
+WHERE p.validacion IN ('Under-triage', 'Over-triage')
+  AND e.ID_CASO IS NOT NULL
+  AND length(trim(e.ID_CASO)) > 0;
