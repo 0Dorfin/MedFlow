@@ -51,6 +51,107 @@ Detalle del flujo y estados en `[docs/servicios.md](docs/servicios.md)`; arquite
 
 ---
 
+## Estructura del repositorio
+
+```
+triaje_urgencias/
+├── docker-compose.yml              # Orquestación de todos los contenedores
+├── .env.example                    # Plantilla de variables de entorno
+├── README.md
+│
+├── docs/                           # Documentación
+│   ├── arquitectura.md
+│   ├── servicios.md
+│   ├── dominio-clinico.md
+│   ├── modelo-ml.md
+│   ├── gestion-errores.md
+│   └── flujo-n8n.md
+│
+├── data/
+│   ├── dictionaries/
+│   │   └── manchester_terms.csv    # Diccionario cerrado de síntomas (112 términos)
+│   ├── prompts/                    # Plantillas Jinja2 de los prompts LLM
+│   │   ├── extract_entities.j2
+│   │   ├── normalize_entities.j2
+│   │   ├── label_triage.j2
+│   │   └── translate_summarize.j2
+│   ├── fareez_dataset/             # Corpus de transcripciones clínicas (Fareez et al.)
+│   │   └── transcripts/
+│   └── samples/
+│
+├── infra/                          # Scripts de inicialización de la infraestructura
+│   ├── postgres/
+│   │   ├── 00-create-airflow-db.sh
+│   │   └── 01-init-triage.sql      # Esquema: Entrevista, Texto_Procesado, Prediccion, Task_Log + vistas
+│   ├── minio/
+│   │   └── bootstrap-buckets.sh    # Crea los buckets de minIO
+│   └── n8n/
+│       └── import-workflows.sh     # Importa los workflows de n8n
+│
+├── airflow/
+│   ├── dags/                       # DAGs del pipeline
+│   │   ├── dag_text_ingestion.py   # Fase 1 (texto)
+│   │   ├── dag_audio_ingestion.py  # Fase 1 (audio: + transcripción)
+│   │   ├── dag_llm_enrichment.py   # Batch: enriquece casos RECIBIDO
+│   │   ├── dag_model_training.py   # Construye dataset + entrena + recarga modelo
+│   │   ├── dag_prediction_phase_2.py
+│   │   ├── dag_evaluation.py       # Batch: valida predicciones
+│   │   ├── dag_audit_ethics.py     # Batch: auditoría ética + alerta
+│   │   └── triage_helpers.py       # Helpers comunes (post_json, reintentos, callback n8n)
+│   ├── config/
+│   └── logs/
+│
+├── n8n/
+│   └── workflows/
+│       ├── error_notification.json       # Alerta técnica ante fallo de Airflow
+│       ├── webhook_alerta_clinica.json   # Alerta clínica por sesgo emocional
+│       └── webhook_triaje_procesado.json # Alerta clínica para casos urgentes C1 o C2
+│
+├── services/
+│   ├── _common/                    # Librería compartida
+│   │   ├── triage_common/
+│   │   │   ├── contracts.py        # Modelos Pydantic, enums (TriageLevel, GrupoClinico...)
+│   │   │   ├── db.py               # Cliente Postgres + helpers
+│   │   │   ├── storage.py          # Cliente minIO tipado por bucket
+│   │   │   ├── llm.py              # Cliente LLM (OpenRouter) + Jinja2
+│   │   │   └── dictionary.py       # Carga y normalización del diccionario Manchester
+│   │   ├── tests/
+│   │   └── pyproject.toml
+│   │
+│   ├── api-gateway-ingesta/        # :8000 Entrada de casos, dispara DAG
+│   ├── api-gateway-consulta/       # :8001 Lectura de resultados
+│   ├── transcripcion/              # :9100 Audio → texto (faster-whisper)
+│   ├── preprocessing/              # :9101 Limpieza de texto
+│   ├── llm-extraction/             # :9110 Extracción de síntomas + traducción/resumen
+│   ├── llm-normalization/          # :9111 Mapeo al diccionario cerrado
+│   ├── llm-labeling/               # :9112 Etiquetado Manchester (triage_real)
+│   ├── anxiety-score/              # :9113 Score de ansiedad (lexicón + LLM)
+│   ├── dataset-builder/            # :9120 Construye datasets Parquet en minIO
+│   ├── ml-training/                # :9121 Entrena el clasificador
+│   ├── ml-prediction/              # :9122 Predice el nivel (prediccion_ia)
+│   ├── evaluation/                 # :9123 Valida predicción vs etiqueta
+│   ├── audit-ethics/               # :9124 Auditoría ética + alerta n8n
+│   └── frontend/                   # :3000 Dashboard Next.js
+│       ├── Dockerfile
+│       ├── package.json
+│       └── src/
+│           ├── app/                # Páginas (bandeja, historial)
+│           ├── components/
+│           └── lib/
+│
+├── scripts/                        # Operación y mantenimiento de datos
+│   ├── seed_postgres.py            # Carga de datos de prueba
+│   ├── predict_batch.py
+│   ├── recompute_anxiety.py
+│   ├── recompute_normalization.py
+│   ├── retry_stuck.py              # Reintenta casos atascados
+│
+└── notebooks/
+    └── ml_exploration.ipynb        # Exploración del modelo
+```
+
+---
+
 ## Cómo ejecutar
 
 ```bash
@@ -215,106 +316,4 @@ Plantilla completa en `.env.example`. Las principales:
 | `[docs/modelo-ml.md](docs/modelo-ml.md)`             | Dataset, features, algoritmos, métricas y guardado/carga del modelo.                               |
 | `[docs/gestion-errores.md](docs/gestion-errores.md)` | Reintentos, registro en Postgres, notificación n8n y recuperación.                                 |
 | `[docs/flujo-n8n.md](docs/flujo-n8n.md)`             | Workflows de n8n.                                                                                  |
-
-
----
-
-## Estructura del repositorio
-
-```
-triaje_urgencias/
-├── docker-compose.yml              # Orquestación de todos los contenedores
-├── .env.example                    # Plantilla de variables de entorno
-├── README.md
-│
-├── docs/                           # Documentación
-│   ├── arquitectura.md
-│   ├── servicios.md
-│   ├── dominio-clinico.md
-│   ├── modelo-ml.md
-│   ├── gestion-errores.md
-│   └── flujo-n8n.md
-│
-├── data/
-│   ├── dictionaries/
-│   │   └── manchester_terms.csv    # Diccionario cerrado de síntomas (112 términos)
-│   ├── prompts/                    # Plantillas Jinja2 de los prompts LLM
-│   │   ├── extract_entities.j2
-│   │   ├── normalize_entities.j2
-│   │   ├── label_triage.j2
-│   │   └── translate_summarize.j2
-│   ├── fareez_dataset/             # Corpus de transcripciones clínicas (Fareez et al.)
-│   │   └── transcripts/
-│   └── samples/
-│
-├── infra/                          # Scripts de inicialización de la infraestructura
-│   ├── postgres/
-│   │   ├── 00-create-airflow-db.sh
-│   │   └── 01-init-triage.sql      # Esquema: Entrevista, Texto_Procesado, Prediccion, Task_Log + vistas
-│   ├── minio/
-│   │   └── bootstrap-buckets.sh    # Crea los buckets de minIO
-│   └── n8n/
-│       └── import-workflows.sh     # Importa los workflows de n8n
-│
-├── airflow/
-│   ├── dags/                       # DAGs del pipeline
-│   │   ├── dag_text_ingestion.py   # Fase 1 (texto)
-│   │   ├── dag_audio_ingestion.py  # Fase 1 (audio: + transcripción)
-│   │   ├── dag_llm_enrichment.py   # Batch: enriquece casos RECIBIDO
-│   │   ├── dag_model_training.py   # Construye dataset + entrena + recarga modelo
-│   │   ├── dag_prediction_phase_2.py
-│   │   ├── dag_evaluation.py       # Batch: valida predicciones
-│   │   ├── dag_audit_ethics.py     # Batch: auditoría ética + alerta
-│   │   └── triage_helpers.py       # Helpers comunes (post_json, reintentos, callback n8n)
-│   ├── config/
-│   └── logs/
-│
-├── n8n/
-│   └── workflows/
-│       ├── error_notification.json       # Alerta técnica ante fallo de Airflow
-│       ├── webhook_alerta_clinica.json   # Alerta clínica por sesgo emocional
-│       └── webhook_triaje_procesado.json # Alerta clínica para casos urgentes C1 o C2
-│
-├── services/
-│   ├── _common/                    # Librería compartida
-│   │   ├── triage_common/
-│   │   │   ├── contracts.py        # Modelos Pydantic, enums (TriageLevel, GrupoClinico...)
-│   │   │   ├── db.py               # Cliente Postgres + helpers
-│   │   │   ├── storage.py          # Cliente minIO tipado por bucket
-│   │   │   ├── llm.py              # Cliente LLM (OpenRouter) + Jinja2
-│   │   │   └── dictionary.py       # Carga y normalización del diccionario Manchester
-│   │   ├── tests/
-│   │   └── pyproject.toml
-│   │
-│   ├── api-gateway-ingesta/        # :8000 Entrada de casos, dispara DAG
-│   ├── api-gateway-consulta/       # :8001 Lectura de resultados
-│   ├── transcripcion/              # :9100 Audio → texto (faster-whisper)
-│   ├── preprocessing/              # :9101 Limpieza de texto
-│   ├── llm-extraction/             # :9110 Extracción de síntomas + traducción/resumen
-│   ├── llm-normalization/          # :9111 Mapeo al diccionario cerrado
-│   ├── llm-labeling/               # :9112 Etiquetado Manchester (triage_real)
-│   ├── anxiety-score/              # :9113 Score de ansiedad (lexicón + LLM)
-│   ├── dataset-builder/            # :9120 Construye datasets Parquet en minIO
-│   ├── ml-training/                # :9121 Entrena el clasificador
-│   ├── ml-prediction/              # :9122 Predice el nivel (prediccion_ia)
-│   ├── evaluation/                 # :9123 Valida predicción vs etiqueta
-│   ├── audit-ethics/               # :9124 Auditoría ética + alerta n8n
-│   └── frontend/                   # :3000 Dashboard Next.js
-│       ├── Dockerfile
-│       ├── package.json
-│       └── src/
-│           ├── app/                # Páginas (bandeja, historial)
-│           ├── components/
-│           └── lib/
-│
-├── scripts/                        # Operación y mantenimiento de datos
-│   ├── seed_postgres.py            # Carga de datos de prueba
-│   ├── predict_batch.py
-│   ├── recompute_anxiety.py
-│   ├── recompute_normalization.py
-│   ├── retry_stuck.py              # Reintenta casos atascados
-│
-└── notebooks/
-    └── ml_exploration.ipynb        # Exploración del modelo
-```
 
