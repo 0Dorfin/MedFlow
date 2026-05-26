@@ -1,6 +1,10 @@
+--extra-index-url https://download.pytorch.org/whl/cu128
 fastapi==0.115.5
 uvicorn[standard]==0.32.1
-faster-whisper==1.1.0
+torch==2.7.0
+torchaudio==2.7.0
+whisperx==3.3.1
+matplotlib>=3.7,<4
 pydantic==2.10.3
 minio>=7.2,<8
 psycopg2-binary>=2.9,<3

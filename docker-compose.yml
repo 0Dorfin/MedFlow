@@ -223,8 +223,11 @@ services:
     restart: unless-stopped
     environment:
       WHISPER_MODEL: ${WHISPER_MODEL:-base}
-      WHISPER_DEVICE: ${WHISPER_DEVICE:-cpu}
-      WHISPER_COMPUTE_TYPE: ${WHISPER_COMPUTE_TYPE:-int8}
+      WHISPER_DEVICE: ${WHISPER_DEVICE:-cuda}
+      WHISPER_COMPUTE_TYPE: ${WHISPER_COMPUTE_TYPE:-float16}
+      WHISPER_BATCH_SIZE: ${WHISPER_BATCH_SIZE:-16}
+      DIARIZATION_NUM_SPEAKERS: ${DIARIZATION_NUM_SPEAKERS:-2}
+      HF_TOKEN: ${HF_TOKEN:-}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       POSTGRES_USER: ${POSTGRES_USER:-triage}
@@ -242,6 +245,13 @@ services:
       minio:
         condition: service_healthy
     networks: [triage_net]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
 
   frontend:
     build:

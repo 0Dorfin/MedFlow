@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "triage_common"
 version = "0.1.0"
 description = "Shared library for TriageIA microservices"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 dependencies = [
     "pydantic>=2.7,<3",
     "psycopg2-binary>=2.9,<3",
