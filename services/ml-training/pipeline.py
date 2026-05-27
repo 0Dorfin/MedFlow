@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Iterable
 
@@ -17,11 +18,17 @@ from sklearn.metrics import (
     f1_score,
     recall_score,
 )
-from sklearn.model_selection import StratifiedKFold, cross_val_predict
+from sklearn.model_selection import StratifiedGroupKFold, StratifiedKFold, cross_val_predict
 from sklearn.preprocessing import MultiLabelBinarizer
+
+try:
+    from triage_common.dictionary import list_clinical_terms
+except Exception:
+    list_clinical_terms = None
 
 
 TRIAGE_CLASSES = ["C1", "C2", "C3", "C4", "C5"]
+TRIAGE_LEVEL = {"C1": 1, "C2": 2, "C3": 3, "C4": 4, "C5": 5}
 
 
 @dataclass
@@ -64,7 +71,7 @@ def build_features(df: pd.DataFrame, text_col: str = "resumen_es", entity_col: s
 def _candidate_estimators() -> dict[str, ClassifierMixin]:
     return {
         "logistic_regression": LogisticRegression(
-            class_weight="balanced", max_iter=1000, solver="liblinear", multi_class="ovr"
+            class_weight="balanced", max_iter=1000
         ),
         "random_forest": RandomForestClassifier(
             class_weight="balanced", n_estimators=200, random_state=42, n_jobs=1
@@ -73,18 +80,38 @@ def _candidate_estimators() -> dict[str, ClassifierMixin]:
     }
 
 
-def _make_vectorizers(texts: list[str], entities: list[list[str]]):
+def _load_vocab() -> list[str] | None:
+    if list_clinical_terms is None:
+        return None
+    try:
+        terms = list_clinical_terms()
+    except Exception:
+        return None
+    return sorted(terms) if terms else None
+
+
+def _filter_to_vocab(entities: list[list[str]], vocab: Iterable[str]) -> list[list[str]]:
+    allowed = set(vocab)
+    return [[e for e in row if e in allowed] for row in entities]
+
+
+def _make_vectorizers(texts: list[str], entities: list[list[str]], vocab: list[str] | None = None):
     tfidf = TfidfVectorizer(ngram_range=(1, 2), min_df=1, max_df=0.95)
     tfidf_matrix = tfidf.fit_transform(texts)
-    mlb = MultiLabelBinarizer()
-    entity_matrix = mlb.fit_transform(entities)
+    if vocab is not None:
+        mlb = MultiLabelBinarizer(classes=vocab)
+        mlb.fit([vocab])
+        entity_matrix = mlb.transform(_filter_to_vocab(entities, vocab))
+    else:
+        mlb = MultiLabelBinarizer()
+        entity_matrix = mlb.fit_transform(entities)
     features = hstack([tfidf_matrix, entity_matrix]).tocsr()
     return tfidf, mlb, features
 
 
 def _transform(tfidf: TfidfVectorizer, mlb: MultiLabelBinarizer, texts: list[str], entities: list[list[str]]):
     tfidf_matrix = tfidf.transform(texts)
-    entity_matrix = mlb.transform(entities)
+    entity_matrix = mlb.transform(_filter_to_vocab(entities, mlb.classes_.tolist()))
     return hstack([tfidf_matrix, entity_matrix]).tocsr()
 
 
@@ -93,6 +120,23 @@ def _safe_cv(y: np.ndarray) -> int:
     if (class_counts < 2).any():
         return 0
     return min(5, int(class_counts.min()))
+
+
+def _groups_from_df(df: pd.DataFrame) -> np.ndarray | None:
+    if "id_caso" not in df.columns:
+        return None
+    return df["id_caso"].astype(str).apply(lambda s: re.sub(r"_AUG_\d+$", "", s)).to_numpy()
+
+
+def _under_triage_rate(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    pairs = [
+        (TRIAGE_LEVEL[t], TRIAGE_LEVEL[p])
+        for t, p in zip(y_true.tolist(), y_pred.tolist())
+        if t in TRIAGE_LEVEL and p in TRIAGE_LEVEL
+    ]
+    if not pairs:
+        return 0.0
+    return float(np.mean([pred > true for true, pred in pairs]))
 
 
 def _compute_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict:
@@ -107,6 +151,7 @@ def _compute_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict:
             cls: float(recall_score(y_true, y_pred, labels=[cls], average="macro", zero_division=0))
             for cls in labels_present
         },
+        "under_triage_rate": _under_triage_rate(y_true, y_pred),
         "classification_report": report,
         "confusion_matrix": cm,
     }
@@ -120,16 +165,22 @@ def train_best(df: pd.DataFrame) -> TrainedArtifacts:
 
     texts, entities = build_features(df)
     y = df["triage_real"].astype(str).to_numpy()
+    vocab = _load_vocab()
+    groups = _groups_from_df(df)
 
     n_splits = _safe_cv(y)
 
     results: list[tuple[str, ClassifierMixin, dict]] = []
 
     for name, estimator in _candidate_estimators().items():
-        tfidf, mlb, x = _make_vectorizers(texts, entities)
+        tfidf, mlb, x = _make_vectorizers(texts, entities, vocab)
         if n_splits >= 2:
-            skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
-            y_pred = cross_val_predict(estimator, x, y, cv=skf)
+            if groups is not None:
+                cv = StratifiedGroupKFold(n_splits=n_splits, shuffle=True, random_state=42)
+                y_pred = cross_val_predict(estimator, x, y, cv=cv, groups=groups)
+            else:
+                cv = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
+                y_pred = cross_val_predict(estimator, x, y, cv=cv)
         else:
             estimator.fit(x, y)
             y_pred = estimator.predict(x)
@@ -140,7 +191,7 @@ def train_best(df: pd.DataFrame) -> TrainedArtifacts:
     results.sort(key=lambda r: r[2]["f1_macro"], reverse=True)
     best_name, best_est, best_metrics = results[0]
 
-    tfidf, mlb, x = _make_vectorizers(texts, entities)
+    tfidf, mlb, x = _make_vectorizers(texts, entities, vocab)
     best_est.fit(x, y)
 
     pipeline_payload = {

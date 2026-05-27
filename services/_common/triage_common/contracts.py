@@ -89,6 +89,7 @@ class IngestaRequest(BaseModel):
 
 class IngestaResponse(BaseModel):
     guid: str
+    id_caso: Optional[str] = None
     estado: str
     workflow_id: Optional[str] = None
 

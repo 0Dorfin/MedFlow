@@ -28,7 +28,7 @@
           "assignments": [
             {"id": "1", "name": "received_at", "value": "={{$now.toISO()}}", "type": "string"},
             {"id": "2", "name": "guid", "value": "={{$json.body.guid}}", "type": "string"},
-            {"id": "3", "name": "id_caso", "value": "={{$json.body.id_caso || 'N/D'}}", "type": "string"},
+            {"id": "3", "name": "id_caso", "value": "={{$json.body.id_caso || $json.body.guid}}", "type": "string"},
             {"id": "4", "name": "clasificacion", "value": "={{$json.body.clasificacion}}", "type": "string"},
             {"id": "5", "name": "score_ansiedad_ia", "value": "={{$json.body.score_ansiedad_ia != null ? $json.body.score_ansiedad_ia : 'N/D'}}", "type": "string"},
             {"id": "6", "name": "resumen", "value": "={{$json.body.resumen ? (String($json.body.resumen).length > 240 ? String($json.body.resumen).slice(0, 240).trimEnd() + '...' : String($json.body.resumen)) : 'Sin resumen disponible.'}}", "type": "string"},

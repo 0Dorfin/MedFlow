@@ -100,6 +100,8 @@ def run(req: AuditEthicsRequest) -> AuditEthicsResponse:
     started = datetime.utcnow()
     result = evaluate(req)
 
+    db.upsert_texto_procesado(req.guid, {"triage_real": req.triage_real.value})
+
     db.upsert_prediccion(
         req.guid,
         validacion=result.validacion,

@@ -115,7 +115,7 @@ export function ResultPanel({ result, output, loading }: ResultPanelProps) {
             {meta.code} {meta.label}
           </p>
           <p className="mt-2 text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">
-            {result.justificacion}
+            {meta.desc} · {meta.minutes === "0" ? "atención inmediata" : `atención en ≤ ${meta.minutes} min`}
           </p>
         </motion.div>
       )}
@@ -129,21 +129,25 @@ export function ResultPanel({ result, output, loading }: ResultPanelProps) {
             {result.textoTranscrito}
           </p>
         </motion.div>
-        <motion.div layout className="grid grid-cols-2 gap-3">
-          <motion.div layout className="rounded-xl border border-zinc-200/80 bg-white p-4 shadow-card dark:border-zinc-700/80 dark:bg-zinc-900">
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">Ansiedad (LLM)</p>
-            <p className="font-mono text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
-              {result.scoreAnsiedad.toFixed(2)}
-            </p>
-          </motion.div>
-          {result.scoreAnsiedadIa !== null && (
-            <motion.div layout className="rounded-xl border border-zinc-200/80 bg-white p-4 shadow-card dark:border-zinc-700/80 dark:bg-zinc-900">
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">Ansiedad (IA)</p>
-              <p className="font-mono text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
-                {result.scoreAnsiedadIa.toFixed(2)}
-              </p>
-            </motion.div>
-          )}
+        <motion.div layout className="self-start rounded-xl border border-zinc-200/80 bg-white p-4 shadow-card dark:border-zinc-700/80 dark:bg-zinc-900">
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">Ansiedad</p>
+          <p className="font-mono text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
+            {result.scoreAnsiedad.toFixed(2)}
+          </p>
+          <span
+            className={
+              result.scoreAnsiedad >= 0.8
+                ? "mt-3 inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-600/20 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-400/20"
+                : "mt-3 inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-600/20 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-400/20"
+            }
+          >
+            <span className={result.scoreAnsiedad >= 0.8 ? "h-1.5 w-1.5 rounded-full bg-amber-500" : "h-1.5 w-1.5 rounded-full bg-emerald-500"} />
+            {result.scoreAnsiedad >= 0.8
+              ? triage === "C1"
+                ? "Ansiedad alta"
+                : "Ansiedad alta: posible riesgo de infra-triaje"
+              : "Ansiedad en rango normal"}
+          </span>
         </motion.div>
       </motion.div>
 

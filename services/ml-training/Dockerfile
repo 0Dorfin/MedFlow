@@ -14,6 +14,9 @@ RUN pip install --no-cache-dir -r requirements.txt \
 
 COPY services/ml-training/main.py ./
 COPY services/ml-training/pipeline.py ./
+COPY data/dictionaries /app/dictionaries
+
+ENV MANCHESTER_DICTIONARY_PATH=/app/dictionaries/manchester_terms.csv
 
 EXPOSE 9121
 

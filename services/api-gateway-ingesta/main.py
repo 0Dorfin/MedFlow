@@ -176,6 +176,7 @@ async def ingesta(
 
     return IngestaResponse(
         guid=guid,
+        id_caso=id_caso,
         estado=EntrevistaEstado.RECIBIDO.value,
         workflow_id=workflow_id,
     )

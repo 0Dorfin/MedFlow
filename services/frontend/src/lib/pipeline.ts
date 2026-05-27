@@ -15,7 +15,7 @@ import type {
 } from "./types";
 import { isManchesterCode, type ManchesterCode } from "./manchester";
 
-type IngestaResponse = { guid: string; estado: string; workflow_id?: string | null };
+type IngestaResponse = { guid: string; id_caso?: string | null; estado: string; workflow_id?: string | null };
 type TranscribeResponse = { guid: string; texto: string; language: string; duration_seconds: number };
 type PreprocessResponse = { guid: string; texto_preprocesado: string };
 type ExtractResponse = { guid: string; entidades: string[] };
@@ -57,7 +57,7 @@ const STEP_SHORT: Record<PipelineStepId, string> = {
   preprocessing: "Prep",
   extraction: "NER",
   normalization: "Norm",
-  labeling: "Triage",
+  labeling: "Etiqueta",
   anxiety: "Ansiedad",
   prediction: "ML",
   audit: "Audit",
@@ -169,6 +169,7 @@ async function notifyTriajeUrgente(body: {
 async function runAnalysis(
   steps: PipelineStep[],
   guid: string,
+  idCaso: string | null,
   texto: string,
   textoTranscrito: string,
   options: PipelineOptions,
@@ -268,7 +269,7 @@ async function runAnalysis(
   if (prediccionIa === "C1" || prediccionIa === "C2") {
     void notifyTriajeUrgente({
       guid,
-      id_caso: options.idCaso ?? null,
+      id_caso: idCaso,
       clasificacion: prediccionIa,
       score_ansiedad_ia: scoreAnsiedadIa,
       resumen: cleaned,
@@ -363,7 +364,8 @@ export async function runAudioPipeline(
     throw new Error("La transcripción no produjo texto");
   }
 
-  const result = await runAnalysis(steps, guid, texto, texto, options, pasos, onUpdate);
+  const idCaso = ingesta.id_caso ?? options.idCaso ?? null;
+  const result = await runAnalysis(steps, guid, idCaso, texto, texto, options, pasos, onUpdate);
   return { result, pasos };
 }
 
@@ -390,7 +392,8 @@ export async function runTextPipeline(
   );
   pasos.ingesta = ingesta;
   const guid = ingesta.guid;
+  const idCaso = ingesta.id_caso ?? options.idCaso ?? null;
 
-  const result = await runAnalysis(steps, guid, texto, texto, options, pasos, onUpdate);
+  const result = await runAnalysis(steps, guid, idCaso, texto, texto, options, pasos, onUpdate);
   return { result, pasos };
 }
