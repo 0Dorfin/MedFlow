@@ -2,7 +2,7 @@ import { MANCHESTER, MANCHESTER_LEVELS, manchesterTextOn } from "@/lib/mancheste
 
 export function NivelesManchester() {
   return (
-    <div className="rounded-3xl border border-zinc-200/80 bg-white/90 p-5 shadow-card-lg dark:border-zinc-800/80 dark:bg-zinc-900/90 sm:p-6">
+    <div className="rounded-3xl border border-zinc-200/80 bg-white/90 p-5 dark:border-zinc-800/80 dark:bg-zinc-900/90 sm:p-6">
       <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-zinc-400 dark:text-zinc-500">
         Protocolo
       </p>

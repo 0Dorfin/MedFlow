@@ -17,3 +17,9 @@ infra/backups/
 *.sql.gz
 skills-lock.json
 backups/
+CLAUDE.md
+AGENTS.md
+**/CLAUDE.md
+**/AGENTS.md
+data/fareez_dataset/audios/
+services/frontend/pnpm-lock.yaml

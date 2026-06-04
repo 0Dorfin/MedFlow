@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Pulse } from "@phosphor-icons/react";
+import { Logo } from "@/components/Logo";
 
 export function SplashScreen() {
   const [show, setShow] = useState(true);
@@ -22,17 +22,17 @@ export function SplashScreen() {
           className="fixed inset-0 z-[100] flex flex-col items-center justify-center gap-6"
           style={{ backgroundColor: "var(--background)" }}
         >
-          <motion.span
+          <motion.div
             animate={{ scale: [1, 1.08, 1] }}
             transition={{ repeat: Infinity, duration: 1.4, ease: "easeInOut" }}
-            className="flex h-14 w-14 items-center justify-center rounded-2xl bg-zinc-900 text-white shadow-[0_18px_40px_-18px_rgba(24,24,27,0.6)]"
+            className="flex h-14 w-14 items-center justify-center"
           >
-            <Pulse size={28} weight="bold" />
-          </motion.span>
+            <Logo size={56} className="h-14 w-14" priority />
+          </motion.div>
 
           <div className="text-center">
             <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-zinc-400">
-              TriageIA
+              MedFlow
             </p>
             <h1 className="mt-1.5 text-xl font-semibold tracking-tight text-zinc-900">
               Sistema de Triaje Manchester

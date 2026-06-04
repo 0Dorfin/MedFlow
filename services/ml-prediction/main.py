@@ -22,7 +22,7 @@ from triage_common.contracts import (
 )
 
 
-app = FastAPI(title="TriageIA ML Prediction", version="0.1.0")
+app = FastAPI(title="MedFlow ML Prediction", version="0.1.0")
 
 _storage: Optional[storage.StorageClient] = None
 _model_cache: dict = {"pipeline": None, "url": None}

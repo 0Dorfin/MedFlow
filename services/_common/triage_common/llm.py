@@ -149,7 +149,7 @@ class LLMClient:
                     "Authorization": f"Bearer {self._config.api_key}",
                     "Content-Type": "application/json",
                     "HTTP-Referer": "https://triage.local",
-                    "X-Title": "TriageIA",
+                    "X-Title": "MedFlow",
                 },
             )
             response.raise_for_status()

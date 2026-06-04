@@ -36,7 +36,7 @@ except ImportError:
     from whisperx import DiarizationPipeline
 
 
-app = FastAPI(title="TriageIA Transcripcion", version="0.2.0")
+app = FastAPI(title="MedFlow Transcripcion", version="0.2.0")
 
 MODEL_NAME = os.getenv("WHISPER_MODEL", "base")
 DEVICE = os.getenv("WHISPER_DEVICE", "cpu")

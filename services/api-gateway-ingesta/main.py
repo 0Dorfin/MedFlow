@@ -33,7 +33,7 @@ from triage_common.contracts import (
 )
 
 
-app = FastAPI(title="TriageIA API Gateway Ingesta", version="0.1.0")
+app = FastAPI(title="MedFlow API Gateway Ingesta", version="0.1.0")
 
 AIRFLOW_URL = os.getenv("AIRFLOW_BASE_URL", "")
 AIRFLOW_USER = os.getenv("AIRFLOW_ADMIN_USER", "admin")

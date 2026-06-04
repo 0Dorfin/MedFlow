@@ -92,7 +92,7 @@ export function TriageWorkspace() {
 
       <main className="mx-auto grid min-h-0 w-full max-w-[1500px] flex-1 grid-cols-1 gap-6 overflow-hidden p-4 lg:grid-cols-[minmax(0,520px)_1fr] lg:gap-10 lg:p-8">
         <section className="scroll-area min-h-0 overflow-y-auto pb-2">
-          <div className="rounded-3xl border border-zinc-200/80 bg-white/90 p-5 shadow-card-lg dark:border-zinc-800/80 dark:bg-zinc-900/90 sm:p-6">
+          <div className="rounded-3xl border border-zinc-200/80 bg-white/90 p-5 dark:border-zinc-800/80 dark:bg-zinc-900/90 sm:p-6">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-zinc-400 dark:text-zinc-500">
@@ -128,7 +128,7 @@ export function TriageWorkspace() {
                       : "text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"
                   }`}
                 >
-                  <Icon size={16} weight={mode === key ? "fill" : "regular"} />
+                  <Icon size={16} weight="regular" />
                   {label}
                 </button>
               ))}

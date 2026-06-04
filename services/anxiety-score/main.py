@@ -17,7 +17,7 @@ from triage_common.contracts import (
 )
 
 
-app = FastAPI(title="TriageIA Anxiety Score", version="0.1.0")
+app = FastAPI(title="MedFlow Anxiety Score", version="0.1.0")
 
 _client: Optional[llm.LLMClient] = None
 

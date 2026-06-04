@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "TriageIA — Triaje Manchester",
+  title: "MedFlow — Triaje Manchester",
   description: "Triaje de urgencias por audio con protocolo Manchester",
 };
 

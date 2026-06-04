@@ -1,4 +1,4 @@
-# TriageIA - Triaje Manchester con LLM + Machine Learning
+# MedFlow - Triaje Manchester con LLM + Machine Learning
 
 Sistema que clasifica la urgencia clínica de un paciente (nivel Manchester **C1-C5**) a partir de su texto o audio. Enriquece con un LLM (extracción de síntomas, normalización, etiquetado, score de ansiedad), entrena un modelo de Machine Learning con esas etiquetas y, en producción, predice el nivel de nuevos casos. Incluye un bucle de **auditoría ética** que detecta subestimaciones de gravedad en pacientes con alta carga emocional.
 
@@ -54,7 +54,7 @@ Detalle del flujo y estados en `[docs/servicios.md](docs/servicios.md)`; arquite
 ## Estructura del repositorio
 
 ```
-triaje_urgencias/
+medflow/
 ├── docker-compose.yml              # Orquestación de todos los contenedores
 ├── .env.example                    # Plantilla de variables de entorno
 ├── README.md

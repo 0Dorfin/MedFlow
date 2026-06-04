@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "triage_common"
 version = "0.1.0"
-description = "Shared library for TriageIA microservices"
+description = "Shared library for MedFlow microservices"
 requires-python = ">=3.10"
 dependencies = [
     "pydantic>=2.7,<3",

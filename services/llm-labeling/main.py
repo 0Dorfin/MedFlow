@@ -19,7 +19,7 @@ from triage_common.contracts import (
 )
 
 
-app = FastAPI(title="TriageIA LLM Labeling", version="0.1.0")
+app = FastAPI(title="MedFlow LLM Labeling", version="0.1.0")
 
 _client: Optional[llm.LLMClient] = None
 VALID_TRIAGE = {level.value for level in TriageLevel}

@@ -5,7 +5,7 @@ from fastapi import FastAPI, HTTPException, Query
 from triage_common import db
 
 
-app = FastAPI(title="TriageIA API Gateway Consulta", version="0.1.0")
+app = FastAPI(title="MedFlow API Gateway Consulta", version="0.1.0")
 
 
 @app.get("/health")

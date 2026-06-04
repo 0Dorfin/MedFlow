@@ -21,7 +21,7 @@ from triage_common.contracts import (
 )
 
 
-app = FastAPI(title="TriageIA ML Training", version="0.1.0")
+app = FastAPI(title="MedFlow ML Training", version="0.1.0")
 
 _storage: Optional[storage.StorageClient] = None
 

@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Moon, Pulse, Sun } from "@phosphor-icons/react";
+import { Moon, Sun } from "@phosphor-icons/react";
+import { Logo } from "@/components/Logo";
 
 function ThemeToggle() {
   const [dark, setDark] = useState(false);
@@ -38,12 +39,10 @@ function ThemeToggle() {
 function Brand() {
   return (
     <Link href="/" className="flex items-center gap-2.5">
-      <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900">
-        <Pulse size={16} weight="bold" />
-      </span>
+      <Logo size={28} className="h-7 w-7" priority />
       <span className="flex items-baseline gap-2">
         <span className="text-sm font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
-          TriageIA
+          MedFlow
         </span>
         <span className="hidden text-[10px] font-medium uppercase tracking-[0.18em] text-zinc-400 dark:text-zinc-500 sm:inline">
           Manchester C1–C5
@@ -89,8 +88,7 @@ export function Footer() {
   return (
     <footer className="shrink-0 border-t border-zinc-200/70 bg-white/60 px-4 py-3 backdrop-blur-sm dark:border-zinc-800/70 dark:bg-zinc-950/60 lg:px-8">
       <div className="mx-auto flex max-w-[1500px] items-center justify-between text-[10px] font-medium uppercase tracking-[0.18em] text-zinc-400 dark:text-zinc-600">
-        <span>TriageIA · Protocolo Manchester</span>
-        <span>v0.1 · Uso académico</span>
+        <span>MedFlow · Protocolo Manchester</span>
       </div>
     </footer>
   );

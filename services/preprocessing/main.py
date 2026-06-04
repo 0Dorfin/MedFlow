@@ -17,7 +17,7 @@ from triage_common.contracts import (
 )
 
 
-app = FastAPI(title="TriageIA Preprocessing", version="0.1.0")
+app = FastAPI(title="MedFlow Preprocessing", version="0.1.0")
 
 _URL_RE = re.compile(r"https?://\S+|www\.\S+")
 _CONTROL_RE = re.compile(r"[\x00-\x1f\x7f]")

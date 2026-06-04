@@ -27,7 +27,7 @@ class TranslateSummarizeResponse(BaseModel):
     resumen_es: str
 
 
-app = FastAPI(title="TriageIA LLM Extraction", version="0.1.0")
+app = FastAPI(title="MedFlow LLM Extraction", version="0.1.0")
 
 _client: Optional[llm.LLMClient] = None
 

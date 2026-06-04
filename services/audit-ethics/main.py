@@ -19,7 +19,7 @@ from triage_common.contracts import (
 )
 
 
-app = FastAPI(title="TriageIA Audit Ethics", version="0.1.0")
+app = FastAPI(title="MedFlow Audit Ethics", version="0.1.0")
 
 ANXIETY_BIAS_THRESHOLD = 0.8
 N8N_ALERTA_WEBHOOK = os.getenv("N8N_ALERTA_WEBHOOK", "")
