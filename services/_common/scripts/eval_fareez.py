@@ -1,21 +1,17 @@
 from __future__ import annotations
-
+import json
 import os
 from collections import Counter, defaultdict
 from pathlib import Path
-
 from triage_common.evaluation import accuracy, dominant_group, group_from_filename
 from triage_common.llm import LLMClient, LLMConfig
 from triage_common.search import select_normalization_backend
 
-
 _BAD_CHARS = set('{}[]"\\')
-
 
 def _sanitize(item: str) -> str:
     cleaned = "".join(c for c in str(item) if c not in _BAD_CHARS).strip()
     return cleaned.strip(" ,;:.-")
-
 
 def _read_text(path: Path) -> str:
     data = path.read_bytes()
@@ -26,14 +22,12 @@ def _read_text(path: Path) -> str:
             continue
     return data.decode("utf-8", errors="ignore")
 
-
 def _entities(payload: dict) -> list[str]:
     raw = payload.get("entidades") or payload.get("entities") or []
     if not isinstance(raw, list):
         return []
     cleaned = [_sanitize(x) for x in raw]
     return [c for c in cleaned if c and 2 <= len(c) <= 120]
-
 
 def main() -> int:
     repo = Path(__file__).resolve().parents[3]
@@ -73,8 +67,12 @@ def main() -> int:
     print("confusion (truth->pred):")
     for (truth, pred), n in sorted(confusion.items()):
         print(f"  {truth} -> {pred}: {n}")
-    return 0
 
+    result = {"accuracy_grupo": round(acc, 4), "n": len(sample)}
+    (repo / "services" / "_common" / "eval-result.json").write_text(
+        json.dumps(result), encoding="utf-8"
+    )
+    return 0
 
 if __name__ == "__main__":
     raise SystemExit(main())
