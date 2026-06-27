@@ -80,7 +80,11 @@ def run(req: LabelRequest) -> LabelResponse:
             timestamp_inicio=started,
             timestamp_fin=finished,
             status=TaskStatus.OK,
-            payload_resultado={"triage": triage.value, "justificacion": justificacion},
+            payload_resultado={
+                "triage": triage.value,
+                "justificacion": justificacion,
+                "provenance": get_client().provenance("label_triage.j2"),
+            },
         )
     )
 

@@ -126,7 +126,7 @@ export function ResultPanel({ result, output, loading }: ResultPanelProps) {
             Transcripción
           </p>
           <p className="text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">
-            {result.textoTranscrito}
+            {result.textoPreprocesado || result.textoTranscrito}
           </p>
         </motion.div>
         <motion.div layout className="self-start rounded-xl border border-zinc-200/80 bg-white p-4 shadow-card dark:border-zinc-700/80 dark:bg-zinc-900">

@@ -9,16 +9,17 @@ El pipeline se orquesta con **Apache Airflow** (procesamiento batch) y **n8n** (
 ## Tabla de contenidos
 
 1. [Pipeline](#pipeline)
-2. [Requisitos](#requisitos)
-3. [Cómo ejecutar](#cómo-ejecutar)
-4. [Flujo de prueba](#flujo-de-prueba)
-5. [Comandos útiles](#comandos-útiles)
-6. [Stack tecnológico](#stack-tecnológico)
-7. [Servicios](#servicios)
-8. [Orquestación: Airflow y n8n](#orquestación-airflow-y-n8n)
-9. [Variables de entorno](#variables-de-entorno)
-10. [Documentación](#documentación)
-11. [Estructura del repositorio](#estructura-del-repositorio)
+2. [Azure (local/cloud)](#azure-localcloud)
+3. [Requisitos](#requisitos)
+4. [Cómo ejecutar](#cómo-ejecutar)
+5. [Flujo de prueba](#flujo-de-prueba)
+6. [Comandos útiles](#comandos-útiles)
+7. [Stack tecnológico](#stack-tecnológico)
+8. [Servicios](#servicios)
+9. [Orquestación: Airflow y n8n](#orquestación-airflow-y-n8n)
+10. [Variables de entorno](#variables-de-entorno)
+11. [Documentación](#documentación)
+12. [Estructura del repositorio](#estructura-del-repositorio)
 
 ---
 
@@ -44,10 +45,45 @@ Detalle del flujo y estados en `[docs/servicios.md](docs/servicios.md)`; arquite
 
 ---
 
+## Azure (local/cloud)
+
+Cada paso de IA tiene **doble backend** seleccionable por variable de entorno: corre **local** (gratis, sin dependencias cloud) o sobre **Azure AI**. Es un patrón adapter — el camino local queda intacto y Azure entra detrás de la misma interfaz, así que un revisor puede ejecutar todo sin coste y la migración cloud es real donde aporta.
+
+
+| Paso                                   | `local`         | `azure`                                           | Variable                |
+| -------------------------------------- | --------------- | ------------------------------------------------- | ----------------------- |
+| LLM (extracción, etiquetado, ansiedad) | OpenRouter      | Azure OpenAI `gpt-4o-mini` (SDK `openai`)         | `LLM_BACKEND`           |
+| Transcripción                          | whisperx        | Azure AI Speech (diariza, aísla voz del paciente) | `TRANSCRIPTION_BACKEND` |
+| Normalización                          | diccionario CSV | Azure AI Search (búsqueda semántica)              | `NORMALIZATION_BACKEND` |
+| Redacción PII                          | regex           | Azure AI Language (auto es/en, conserva onset)    | `PII_BACKEND`           |
+
+
+```mermaid
+flowchart LR
+  A[audio/texto] --> P[redacción PII<br/>regex / Azure Language]
+  P --> E[extracción<br/>OpenRouter / gpt-4o-mini]
+  E --> N{normalización}
+  N -->|local| Nc[diccionario CSV]
+  N -->|azure| Na[Azure AI Search]
+  Nc --> L
+  Na --> L[etiquetado C1-C5<br/>OpenRouter / gpt-4o-mini]
+  L --> S[score ansiedad]
+```
+
+
+
+- **Normalización** — eval de accuracy de grupo sobre el corpus fareez (`services/_common/scripts/eval_fareez.py`): diccionario literal **0.50**; AI Search sin umbral **0.29** (over-match); AI Search con `AZURE_SEARCH_MIN_SCORE=4.0` **0.50** y además recall semántico (capta variantes como *"no me llega el aire" → disnea* que el match literal pierde).
+- **PII** — Azure AI Language redacta nombres y teléfonos (es/en, idioma auto-detectado) que el regex no cubre, conservando el *onset* clínico (*"desde anoche"*) mediante `categories_filter`.
+
+Validación live en los smokes de `services/_common/scripts/` y `services/transcripcion/scripts/`.
+
+---
+
 ## Requisitos
 
 - Docker y Docker Compose.
-- Una `OPENROUTER_API_KEY` (proveedor LLM).
+- Una `OPENROUTER_API_KEY` (proveedor LLM del camino local).
+- (Opcional) Recursos y claves Azure para los backends cloud — ver [Azure (local/cloud)](#azure-localcloud).
 
 ---
 
@@ -316,4 +352,5 @@ Plantilla completa en `.env.example`. Las principales:
 | `[docs/modelo-ml.md](docs/modelo-ml.md)`             | Dataset, features, algoritmos, métricas y guardado/carga del modelo.                               |
 | `[docs/gestion-errores.md](docs/gestion-errores.md)` | Reintentos, registro en Postgres, notificación n8n y recuperación.                                 |
 | `[docs/flujo-n8n.md](docs/flujo-n8n.md)`             | Workflows de n8n.                                                                                  |
+
 

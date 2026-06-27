@@ -6,7 +6,13 @@ from unittest.mock import MagicMock
 import httpx
 import pytest
 
-from triage_common.llm import LLMClient, LLMConfig, LLMError, LLMInvalidJSON
+from triage_common.llm import (
+    AzureFoundryBackend,
+    LLMClient,
+    LLMConfig,
+    LLMError,
+    LLMInvalidJSON,
+)
 
 
 @pytest.fixture
@@ -171,3 +177,130 @@ class TestListModels:
             {"data": [{"id": "model-a"}, {"id": "model-b"}]}
         )
         assert llm.list_models() == ["model-a", "model-b"]
+
+
+class TestBackendSelection:
+    def test_from_env_defaults_to_local(self, monkeypatch):
+        monkeypatch.delenv("LLM_BACKEND", raising=False)
+        assert LLMConfig.from_env().backend == "local"
+
+    def test_from_env_reads_backend(self, monkeypatch):
+        monkeypatch.setenv("LLM_BACKEND", "azure")
+        assert LLMConfig.from_env().backend == "azure"
+
+    def test_default_backend_calls_openrouter(self, config, fake_client, prompts_path):
+        fake_client.post.return_value = _chat_response("ok")
+        client = LLMClient(config=config, client=fake_client, prompts_dir=prompts_path)
+        assert client.generate("p") == "ok"
+        assert fake_client.post.called
+
+    def test_unknown_backend_raises(self, fake_client, prompts_path):
+        cfg = LLMConfig(
+            base_url="https://x",
+            default_model="m",
+            timeout_seconds=10.0,
+            max_retries=1,
+            api_key="k",
+            backend="marte",
+        )
+        with pytest.raises(LLMError):
+            LLMClient(config=cfg, client=fake_client, prompts_dir=prompts_path)
+
+    def test_azure_backend_requires_endpoint(self, prompts_path):
+        cfg = LLMConfig(
+            base_url="https://x",
+            default_model="m",
+            timeout_seconds=10.0,
+            max_retries=1,
+            api_key="k",
+            backend="azure",
+        )
+        with pytest.raises(LLMError):
+            LLMClient(config=cfg, prompts_dir=prompts_path)
+
+    def test_injected_backend_delegates(self, config, prompts_path):
+        backend = MagicMock()
+        backend.chat.return_value = "from-backend"
+        client = LLMClient(config=config, prompts_dir=prompts_path, backend=backend)
+        assert client.generate("hola") == "from-backend"
+        backend.chat.assert_called_once()
+
+
+def _azure_response(content):
+    response = MagicMock()
+    message = MagicMock()
+    message.content = content
+    choice = MagicMock()
+    choice.message = message
+    response.choices = [choice]
+    return response
+
+
+def _azure_config(**overrides):
+    base = dict(
+        base_url="x",
+        default_model="m",
+        timeout_seconds=10.0,
+        max_retries=1,
+        api_key=None,
+        backend="azure",
+        azure_endpoint="https://foo.example",
+        azure_deployment="gpt-4o-mini-dep",
+    )
+    base.update(overrides)
+    return LLMConfig(**base)
+
+
+class TestAzureFoundryBackend:
+    def test_returns_message_content(self, prompts_path):
+        fake = MagicMock()
+        fake.chat.completions.create.return_value = _azure_response("hola-azure")
+        client = LLMClient(config=_azure_config(), client=fake, prompts_dir=prompts_path)
+        assert client.generate("p") == "hola-azure"
+        kwargs = fake.chat.completions.create.call_args.kwargs
+        assert kwargs["model"] == "gpt-4o-mini-dep"
+        assert kwargs["messages"] == [{"role": "user", "content": "p"}]
+
+    def test_passes_json_response_format(self, prompts_path):
+        fake = MagicMock()
+        fake.chat.completions.create.return_value = _azure_response("{}")
+        client = LLMClient(config=_azure_config(), client=fake, prompts_dir=prompts_path)
+        client.generate("p", json_mode=True)
+        assert fake.chat.completions.create.call_args.kwargs["response_format"] == {"type": "json_object"}
+
+    def test_raises_on_empty_choices(self, prompts_path):
+        fake = MagicMock()
+        empty = MagicMock()
+        empty.choices = []
+        fake.chat.completions.create.return_value = empty
+        client = LLMClient(config=_azure_config(), client=fake, prompts_dir=prompts_path)
+        with pytest.raises(LLMError):
+            client.generate("p")
+
+    def test_backend_constructed_directly(self, prompts_path):
+        fake = MagicMock()
+        fake.chat.completions.create.return_value = _azure_response("ok")
+        backend = AzureFoundryBackend(_azure_config(), client=fake)
+        out = backend.chat(
+            {"model": "ignored", "messages": [{"role": "user", "content": "x"}]}
+        )
+        assert out == "ok"
+
+
+class TestProvenance:
+    def test_local_provenance(self, config, fake_client, prompts_path):
+        client = LLMClient(config=config, client=fake_client, prompts_dir=prompts_path)
+        assert client.provenance("label_triage.j2") == {
+            "backend": "local",
+            "model": "meta-llama/llama-3.2-3b-instruct:free",
+            "prompt": "label_triage.j2",
+        }
+
+    def test_azure_provenance(self, prompts_path):
+        client = LLMClient(
+            config=_azure_config(), client=MagicMock(), prompts_dir=prompts_path
+        )
+        prov = client.provenance()
+        assert prov["backend"] == "azure"
+        assert prov["model"] == "gpt-4o-mini-dep"
+        assert prov["prompt"] is None
