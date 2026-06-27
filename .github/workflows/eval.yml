@@ -1,5 +1,10 @@
 name: eval
-on: workflow_dispatch
+on:
+  push:
+    paths:
+      - ".github/workflows/eval.yml"
+      - "data/prompts/**"
+  workflow_dispatch:
 jobs:
   regression-eval:
     runs-on: ubuntu-latest
