@@ -10,16 +10,17 @@ El pipeline se orquesta con **Apache Airflow** (procesamiento batch) y **n8n** (
 
 1. [Pipeline](#pipeline)
 2. [Azure (local/cloud)](#azure-localcloud)
-3. [Requisitos](#requisitos)
-4. [Cómo ejecutar](#cómo-ejecutar)
-5. [Flujo de prueba](#flujo-de-prueba)
-6. [Comandos útiles](#comandos-útiles)
-7. [Stack tecnológico](#stack-tecnológico)
-8. [Servicios](#servicios)
-9. [Orquestación: Airflow y n8n](#orquestación-airflow-y-n8n)
-10. [Variables de entorno](#variables-de-entorno)
-11. [Documentación](#documentación)
-12. [Estructura del repositorio](#estructura-del-repositorio)
+3. [CI / Regression gate](#ci--regression-gate)
+4. [Requisitos](#requisitos)
+5. [Cómo ejecutar](#cómo-ejecutar)
+6. [Flujo de prueba](#flujo-de-prueba)
+7. [Comandos útiles](#comandos-útiles)
+8. [Stack tecnológico](#stack-tecnológico)
+9. [Servicios](#servicios)
+10. [Orquestación: Airflow y n8n](#orquestación-airflow-y-n8n)
+11. [Variables de entorno](#variables-de-entorno)
+12. [Documentación](#documentación)
+13. [Estructura del repositorio](#estructura-del-repositorio)
 
 ---
 
@@ -76,6 +77,19 @@ flowchart LR
 - **PII** — Azure AI Language redacta nombres y teléfonos (es/en, idioma auto-detectado) que el regex no cubre, conservando el *onset* clínico (*"desde anoche"*) mediante `categories_filter`.
 
 Validación live en los smokes de `services/_common/scripts/` y `services/transcripcion/scripts/`.
+
+---
+
+## CI / Regression gate
+
+Cambiar un prompt o el modelo puede degradar el triaje **en silencio**. Dos workflows de **GitHub Actions** lo evitan:
+
+- **tests** (`.github/workflows/tests.yml`) — corre `pytest` en cada push.
+- **eval / regression-eval** (`.github/workflows/eval.yml`) — en cada PR que toca `data/prompts/**`: corre `eval_fareez.py` sobre el corpus → escribe `eval-result.json` → `compare_eval.py` lo compara con `services/_common/eval-baseline.json` (el accuracy aceptado) y **falla si cae más de `MAX_DROP`** (5 puntos por defecto), para distinguir una regresión real del ruido del LLM.
+
+Un **branch ruleset** sobre `master` exige que `regression-eval` pase → un PR que regresa la calidad **no se puede mergear**. Las claves de Azure van como **GitHub Secrets**, nunca en el código. Subir el listón es explícito: si mejoras un prompt de verdad, actualizas `eval-baseline.json` en el mismo PR.
+
+Demostrado: un PR con un prompt deliberadamente roto deja `regression-eval` (y los tests, que imponen el contrato del prompt) en **rojo** automáticamente.
 
 ---
 
