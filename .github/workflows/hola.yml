@@ -1,0 +1,8 @@
+name: Hola
+on:
+  push:
+jobs:
+  saludo:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Esto corre en la nube de Github al hacer push"
