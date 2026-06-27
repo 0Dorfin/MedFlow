@@ -1,0 +1,21 @@
+name: eval
+on: workflow_dispatch
+jobs:
+  regression-eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e 'services/_common[azure]'
+      - name: Run eval
+        env:
+          LLM_BACKEND: azure
+          AZURE_AI_KEY: ${{ secrets.AZURE_AI_KEY }}
+          AZURE_AI_ENDPOINT: ${{ secrets.AZURE_AI_ENDPOINT }}
+          AZURE_AI_DEPLOYMENT: ${{ secrets.AZURE_AI_DEPLOYMENT }}
+          NORMALIZATION_BACKEND: local
+          MANCHESTER_DICTIONARY_PATH: ${{ github.workspace }}/data/dictionaries/manchester_terms.csv
+          EVAL_PER_GROUP: "2"
+        run: python services/_common/scripts/eval_fareez.py
