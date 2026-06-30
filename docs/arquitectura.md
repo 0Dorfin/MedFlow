@@ -152,7 +152,8 @@ El LLM **etiqueta el dataset**; el modelo **aprende de ese dataset** y es lo que
 | Orquestación batch          | Apache Airflow 3.0.5                                                               |
 | Automatización event-driven | n8n 1.74.1                                                                         |
 | LLM                         | OpenRouter (`openai/gpt-oss-120b:free`) · prompts Jinja2 · reintentos `tenacity`   |
-| Transcripción audio         | faster-whisper                                                                     |
+| Transcripción audio         | whisperx                                                                           |
+| IA (cloud)                  | Azure OpenAI `gpt-4o-mini` · Azure AI Speech · Azure AI Search · Azure AI Language  |
 | Detección de idioma         | langdetect                                                                         |
 | Machine Learning            | scikit-learn (TF-IDF + LogisticRegression/RandomForest/GradientBoosting), `joblib` |
 | Base de datos               | PostgreSQL 15 (`psycopg2`)                                                         |
@@ -173,7 +174,7 @@ El LLM **etiqueta el dataset**; el modelo **aprende de ese dataset** y es lo que
 | 5432        | postgres             | `triage_db` + `airflow_db` |
 | 9000 / 9001 | minio                | API S3 / consola web       |
 | 9100        | transcripcion        | Audio → texto              |
-| 9101        | preprocessing        | Limpieza de texto          |
+| 9101        | preprocessing        | Limpieza + redacción PII   |
 | 9110        | llm-extraction       | Extracción de síntomas     |
 | 9111        | llm-normalization    | Mapeo al diccionario       |
 | 9112        | llm-labeling         | Etiquetado Manchester      |

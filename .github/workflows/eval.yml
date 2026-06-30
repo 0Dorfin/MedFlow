@@ -27,5 +27,5 @@ jobs:
           MANCHESTER_DICTIONARY_PATH: ${{ github.workspace }}/data/dictionaries/manchester_terms.csv
           EVAL_PER_GROUP: "2"
         run: python services/_common/scripts/eval_fareez.py
-      - name: Compare con baseline
+      - name: Compara con baseline
         run: python services/_common/scripts/compare_eval.py

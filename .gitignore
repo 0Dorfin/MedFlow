@@ -23,3 +23,5 @@ AGENTS.md
 **/AGENTS.md
 data/fareez_dataset/audios/
 services/frontend/pnpm-lock.yaml
+plan-azure.md
+*.pdf
