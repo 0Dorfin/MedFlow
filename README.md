@@ -50,7 +50,7 @@ Detalle del flujo y estados en `[docs/servicios.md](docs/servicios.md)`; arquite
 
 - Docker y Docker Compose.
 - Una `OPENROUTER_API_KEY` (proveedor LLM del camino local).
-- (Opcional) Recursos y claves Azure para los backends cloud — ver [docs/azure.md](docs/azure.md).
+- (Opcional) Recursos y claves Azure para los backends cloud: [docs/azure.md](docs/azure.md).
 
 ---
 
