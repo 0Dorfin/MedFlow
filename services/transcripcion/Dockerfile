@@ -20,6 +20,7 @@ RUN pip install --no-cache-dir -r requirements.txt \
  && pip install --no-cache-dir --no-build-isolation ./_common
 
 COPY services/transcripcion/main.py ./
+COPY services/transcripcion/transcription.py ./
 
 EXPOSE 9100
 

@@ -21,6 +21,12 @@ test = [
     "pytest>=8.3,<9",
     "pytest-mock>=3.14,<4",
 ]
+azure = [
+    "openai>=1.40,<3",
+    "azure-identity>=1.17,<2",
+    "azure-search-documents>=11.4,<12",
+    "azure-ai-textanalytics>=5.3,<6",
+]
 
 [tool.setuptools.packages.find]
 where = ["."]

@@ -4,6 +4,8 @@ Sistema que clasifica la urgencia clínica de un paciente (nivel Manchester **C1
 
 El pipeline se orquesta con **Apache Airflow** (procesamiento batch) y **n8n** (alertas y notificaciones), sobre microservicios **FastAPI**, **Postgres** y **minIO**.
 
+Cada paso de IA corre **local** (gratis) o sobre **Azure AI**, conmutable por variable de entorno (ver `[docs/azure.md](docs/azure.md)`); un **regression gate** en CI bloquea cambios de prompt que degraden el triaje (ver `[docs/ci.md](docs/ci.md)`).
+
 ---
 
 ## Tabla de contenidos
@@ -47,7 +49,8 @@ Detalle del flujo y estados en `[docs/servicios.md](docs/servicios.md)`; arquite
 ## Requisitos
 
 - Docker y Docker Compose.
-- Una `OPENROUTER_API_KEY` (proveedor LLM).
+- Una `OPENROUTER_API_KEY` (proveedor LLM del camino local).
+- (Opcional) Recursos y claves Azure para los backends cloud — ver [docs/azure.md](docs/azure.md).
 
 ---
 
@@ -59,13 +62,20 @@ medflow/
 ├── .env.example                    # Plantilla de variables de entorno
 ├── README.md
 │
+├── .github/
+│   └── workflows/
+│       ├── tests.yml               # CI: pytest en cada push
+│       └── eval.yml                # CI: regression gate (eval vs baseline) en PR
+│
 ├── docs/                           # Documentación
 │   ├── arquitectura.md
 │   ├── servicios.md
 │   ├── dominio-clinico.md
 │   ├── modelo-ml.md
 │   ├── gestion-errores.md
-│   └── flujo-n8n.md
+│   ├── flujo-n8n.md
+│   ├── azure.md                    # Migración local/Azure (backends conmutables)
+│   └── ci.md                       # CI: tests y regression gate
 │
 ├── data/
 │   ├── dictionaries/
@@ -113,15 +123,18 @@ medflow/
 │   │   │   ├── contracts.py        # Modelos Pydantic, enums (TriageLevel, GrupoClinico...)
 │   │   │   ├── db.py               # Cliente Postgres + helpers
 │   │   │   ├── storage.py          # Cliente minIO tipado por bucket
-│   │   │   ├── llm.py              # Cliente LLM (OpenRouter) + Jinja2
+│   │   │   ├── llm.py              # Cliente LLM (OpenRouter / Azure OpenAI) + Jinja2
+│   │   │   ├── search.py           # Normalización: diccionario local / Azure AI Search
+│   │   │   ├── pii.py              # Redacción PII: regex local / Azure AI Language
+│   │   │   ├── evaluation.py       # Accuracy de grupo sobre el corpus fareez
 │   │   │   └── dictionary.py       # Carga y normalización del diccionario Manchester
 │   │   ├── tests/
 │   │   └── pyproject.toml
 │   │
 │   ├── api-gateway-ingesta/        # :8000 Entrada de casos, dispara DAG
 │   ├── api-gateway-consulta/       # :8001 Lectura de resultados
-│   ├── transcripcion/              # :9100 Audio → texto (faster-whisper)
-│   ├── preprocessing/              # :9101 Limpieza de texto
+│   ├── transcripcion/              # :9100 Audio a texto (whisperx / Azure AI Speech)
+│   ├── preprocessing/              # :9101 Limpieza de texto + redacción PII
 │   ├── llm-extraction/             # :9110 Extracción de síntomas + traducción/resumen
 │   ├── llm-normalization/          # :9111 Mapeo al diccionario cerrado
 │   ├── llm-labeling/               # :9112 Etiquetado Manchester (triage_real)
@@ -225,7 +238,8 @@ pytest services/_common/tests/             # tests de la librería común
 | Orquestación batch          | Apache Airflow 3.0.5 (LocalExecutor)                                               |
 | Automatización event-driven | n8n 1.74.1                                                                         |
 | LLM                         | OpenRouter (`openai/gpt-oss-120b:free`) · prompts Jinja2 · reintentos `tenacity`   |
-| Transcripción audio         | faster-whisper                                                                     |
+| Transcripción audio         | whisperx                                                                           |
+| IA (cloud)                  | Azure OpenAI `gpt-4o-mini` · Azure AI Speech · Azure AI Search · Azure AI Language  |
 | Detección de idioma         | langdetect                                                                         |
 | Machine Learning            | scikit-learn (TF-IDF + LogisticRegression/RandomForest/GradientBoosting), `joblib` |
 | Base de datos               | PostgreSQL 15 (`psycopg2`)                                                         |
@@ -244,8 +258,8 @@ pytest services/_common/tests/             # tests de la librería común
 | -------------------- | ------ | ----------------------------------------------------------------------------- |
 | api-gateway-ingesta  | 8000   | Puerta de entrada: recibe texto/audio, genera GUID, dispara el DAG de Fase 1. |
 | api-gateway-consulta | 8001   | Lectura del resultado completo de un caso.                                    |
-| transcripcion        | 9100   | Audio → texto (faster-whisper).                                               |
-| preprocessing        | 9101   | Limpieza y normalización del texto.                                           |
+| transcripcion        | 9100   | Audio → texto con diarización (aísla al paciente); whisperx o Azure AI Speech. |
+| preprocessing        | 9101   | Limpieza del texto y redacción de PII.                                        |
 | llm-extraction       | 9110   | Extrae síntomas y traduce/resume a español clínico.                           |
 | llm-normalization    | 9111   | Mapea los síntomas al diccionario Manchester cerrado.                         |
 | llm-labeling         | 9112   | Asigna el nivel Manchester (`triage_real`) + justificación.                   |
@@ -301,6 +315,7 @@ Plantilla completa en `.env.example`. Las principales:
 | Airflow       | `AIRFLOW_ADMIN_USER`, `AIRFLOW_ADMIN_PASSWORD`, `AIRFLOW_JWT_SECRET`                                  |
 | n8n           | `N8N_BASIC_AUTH_USER`, `N8N_BASIC_AUTH_PASSWORD`, `N8N_ENCRYPTION_KEY`, `GMAIL_FROM`, `CLINICO_EMAIL` |
 | Transcripción | `WHISPER_MODEL`, `WHISPER_DEVICE`, `WHISPER_COMPUTE_TYPE`                                             |
+| Backends IA   | `LLM_BACKEND`, `TRANSCRIPTION_BACKEND`, `NORMALIZATION_BACKEND`, `PII_BACKEND`, `AZURE_`*             |
 
 
 ---
@@ -316,4 +331,7 @@ Plantilla completa en `.env.example`. Las principales:
 | `[docs/modelo-ml.md](docs/modelo-ml.md)`             | Dataset, features, algoritmos, métricas y guardado/carga del modelo.                               |
 | `[docs/gestion-errores.md](docs/gestion-errores.md)` | Reintentos, registro en Postgres, notificación n8n y recuperación.                                 |
 | `[docs/flujo-n8n.md](docs/flujo-n8n.md)`             | Workflows de n8n.                                                                                  |
+| `[docs/azure.md](docs/azure.md)`                     | Migración local/Azure: backends conmutables, resultados y próximos pasos.                          |
+| `[docs/ci.md](docs/ci.md)`                           | CI: workflow de tests y regression gate (eval + baseline + branch protection).                     |
+
 

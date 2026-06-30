@@ -352,7 +352,7 @@ export async function runAudioPipeline(
     () =>
       postJson<TranscribeResponse>(
         "/api/transcripcion/transcribe",
-        { guid, audio_url: audioUri(guid), language: "es" },
+        { guid, audio_url: audioUri(guid), language: "auto" },
         TIMEOUT_TRANSCRIPCION_MS,
       ),
     onUpdate,

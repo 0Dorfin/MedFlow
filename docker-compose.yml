@@ -222,12 +222,17 @@ services:
     container_name: triage_transcripcion
     restart: unless-stopped
     environment:
+      TRANSCRIPTION_BACKEND: ${TRANSCRIPTION_BACKEND:-local}
       WHISPER_MODEL: ${WHISPER_MODEL:-base}
-      WHISPER_DEVICE: ${WHISPER_DEVICE:-cuda}
-      WHISPER_COMPUTE_TYPE: ${WHISPER_COMPUTE_TYPE:-float16}
+      WHISPER_DEVICE: ${WHISPER_DEVICE:-cpu}
+      WHISPER_COMPUTE_TYPE: ${WHISPER_COMPUTE_TYPE:-int8}
       WHISPER_BATCH_SIZE: ${WHISPER_BATCH_SIZE:-16}
       DIARIZATION_NUM_SPEAKERS: ${DIARIZATION_NUM_SPEAKERS:-2}
       HF_TOKEN: ${HF_TOKEN:-}
+      AZURE_SPEECH_KEY: ${AZURE_SPEECH_KEY:-}
+      AZURE_SPEECH_REGION: ${AZURE_SPEECH_REGION:-}
+      AZURE_SPEECH_ENDPOINT: ${AZURE_SPEECH_ENDPOINT:-}
+      AZURE_SPEECH_LANGUAGE: ${AZURE_SPEECH_LANGUAGE:-auto}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       POSTGRES_USER: ${POSTGRES_USER:-triage}
@@ -245,13 +250,6 @@ services:
       minio:
         condition: service_healthy
     networks: [triage_net]
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
 
   frontend:
     build:
@@ -351,6 +349,11 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-triage}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-triage_pw}
       POSTGRES_DB: ${POSTGRES_DB:-triage_db}
+      PII_BACKEND: ${PII_BACKEND:-local}
+      AZURE_LANGUAGE_ENDPOINT: ${AZURE_LANGUAGE_ENDPOINT:-}
+      AZURE_LANGUAGE_KEY: ${AZURE_LANGUAGE_KEY:-}
+      AZURE_LANGUAGE_PII_LANGUAGE: ${AZURE_LANGUAGE_PII_LANGUAGE:-auto}
+      AZURE_PII_CATEGORIES: ${AZURE_PII_CATEGORIES:-}
     ports:
       - "${PREPROCESSING_PORT:-9101}:9101"
     depends_on:
@@ -374,6 +377,10 @@ services:
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OPENROUTER_MODEL: ${OPENROUTER_MODEL:-meta-llama/llama-3.2-3b-instruct:free}
       OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      LLM_BACKEND: ${LLM_BACKEND:-local}
+      AZURE_AI_ENDPOINT: ${AZURE_AI_ENDPOINT:-}
+      AZURE_AI_DEPLOYMENT: ${AZURE_AI_DEPLOYMENT:-}
+      AZURE_AI_KEY: ${AZURE_AI_KEY:-}
       LLM_TIMEOUT: ${LLM_TIMEOUT:-120}
       LLM_MAX_RETRIES: ${LLM_MAX_RETRIES:-3}
     ports:
@@ -399,8 +406,17 @@ services:
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OPENROUTER_MODEL: ${OPENROUTER_MODEL:-meta-llama/llama-3.2-3b-instruct:free}
       OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      LLM_BACKEND: ${LLM_BACKEND:-local}
+      AZURE_AI_ENDPOINT: ${AZURE_AI_ENDPOINT:-}
+      AZURE_AI_DEPLOYMENT: ${AZURE_AI_DEPLOYMENT:-}
+      AZURE_AI_KEY: ${AZURE_AI_KEY:-}
       LLM_TIMEOUT: ${LLM_TIMEOUT:-120}
       LLM_MAX_RETRIES: ${LLM_MAX_RETRIES:-3}
+      NORMALIZATION_BACKEND: ${NORMALIZATION_BACKEND:-local}
+      AZURE_SEARCH_ENDPOINT: ${AZURE_SEARCH_ENDPOINT:-}
+      AZURE_SEARCH_KEY: ${AZURE_SEARCH_KEY:-}
+      AZURE_SEARCH_INDEX: ${AZURE_SEARCH_INDEX:-manchester-terms}
+      AZURE_SEARCH_MIN_SCORE: ${AZURE_SEARCH_MIN_SCORE:-0.0}
     ports:
       - "${LLM_NORMALIZATION_PORT:-9111}:9111"
     depends_on:
@@ -424,6 +440,10 @@ services:
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OPENROUTER_MODEL: ${OPENROUTER_MODEL:-meta-llama/llama-3.2-3b-instruct:free}
       OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      LLM_BACKEND: ${LLM_BACKEND:-local}
+      AZURE_AI_ENDPOINT: ${AZURE_AI_ENDPOINT:-}
+      AZURE_AI_DEPLOYMENT: ${AZURE_AI_DEPLOYMENT:-}
+      AZURE_AI_KEY: ${AZURE_AI_KEY:-}
       LLM_TIMEOUT: ${LLM_TIMEOUT:-120}
       LLM_MAX_RETRIES: ${LLM_MAX_RETRIES:-3}
     ports:
@@ -449,6 +469,10 @@ services:
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OPENROUTER_MODEL: ${OPENROUTER_MODEL:-meta-llama/llama-3.2-3b-instruct:free}
       OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      LLM_BACKEND: ${LLM_BACKEND:-local}
+      AZURE_AI_ENDPOINT: ${AZURE_AI_ENDPOINT:-}
+      AZURE_AI_DEPLOYMENT: ${AZURE_AI_DEPLOYMENT:-}
+      AZURE_AI_KEY: ${AZURE_AI_KEY:-}
       LLM_TIMEOUT: ${LLM_TIMEOUT:-120}
       LLM_MAX_RETRIES: ${LLM_MAX_RETRIES:-3}
     ports:

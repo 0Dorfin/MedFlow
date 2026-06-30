@@ -92,18 +92,19 @@ Convierte texto/audio en datos clínicos estructurados. Cada servicio: FastAPI, 
 
 ### transcripcion `:9100`
 
-**Audio → texto (faster-whisper).**
+**Audio → texto (whisperx local; Azure AI Speech opcional vía `TRANSCRIPTION_BACKEND=azure`).**
 
 - `POST /transcribe {guid, audio_url}`. Descarga el audio de minIO y transcribe.
-- Une los segmentos en texto plano. **No hace diarización** (no separa médico/paciente).
+- Ambos backends **diarizan y aíslan la voz del paciente**: whisperx local con `DiarizationPipeline` (requiere `HF_TOKEN`; sin token cae a texto plano) y Azure Speech con `ConversationTranscriber`.
 - Marca timestamps de transcripción en `Entrevista`.
 - **Salida:** `{guid, texto, language, duration_seconds}`.
 
 ### preprocessing `:9101`
 
-**Limpieza de texto.**
+**Limpieza de texto y redacción de PII.**
 
 - `POST /run {guid, texto}` → normalización Unicode, limpieza → `texto_preprocesado`.
+- Redacta PII (regex local o Azure AI Language vía `PII_BACKEND=azure`) antes de persistir, de modo que el LLM aguas abajo no ve datos personales.
 
 ### llm-extraction `:9110`
 

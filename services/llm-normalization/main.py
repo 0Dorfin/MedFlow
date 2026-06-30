@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException
 
-from triage_common import db, dictionary, llm
+from triage_common import db, dictionary, llm, search
 from triage_common.contracts import (
     EntrevistaEstado,
     EntrevistaTimestamps,
@@ -22,6 +23,16 @@ app = FastAPI(title="MedFlow LLM Normalization", version="0.1.0")
 
 _client: Optional[llm.LLMClient] = None
 UNMAPPED_TOKEN = "no_mapeado"
+
+NORMALIZATION_BACKEND = os.getenv("NORMALIZATION_BACKEND", "local")
+_norm_backend: Optional[search.NormalizationBackend] = None
+
+
+def get_norm_backend() -> search.NormalizationBackend:
+    global _norm_backend
+    if _norm_backend is None:
+        _norm_backend = search.select_normalization_backend(NORMALIZATION_BACKEND)
+    return _norm_backend
 
 
 def get_client() -> llm.LLMClient:
@@ -82,7 +93,7 @@ def run(req: NormalizeRequest) -> NormalizeResponse:
     started = datetime.utcnow()
     db.mark_timestamp(req.guid, EntrevistaTimestamps.NORMALIZACION, "inicio", when=started)
 
-    mapeados, no_mapeados_directos = dictionary.normalize_many(req.entidades_extraidas)
+    mapeados, no_mapeados_directos = get_norm_backend().normalize_many(req.entidades_extraidas)
     no_mapeadas_final: list[str] = []
 
     if no_mapeados_directos:

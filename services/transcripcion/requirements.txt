@@ -9,3 +9,5 @@ pydantic==2.10.3
 minio>=7.2,<8
 psycopg2-binary>=2.9,<3
 requests>=2.31,<3
+azure-cognitiveservices-speech>=1.40,<2
+imageio-ffmpeg>=0.5,<1

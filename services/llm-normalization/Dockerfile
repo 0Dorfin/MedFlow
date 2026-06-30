@@ -10,7 +10,7 @@ COPY services/_common ./_common
 COPY services/llm-normalization/requirements.txt ./
 
 RUN pip install --no-cache-dir -r requirements.txt \
- && pip install --no-cache-dir ./_common
+ && pip install --no-cache-dir './_common[azure]'
 
 COPY services/llm-normalization/main.py ./
 COPY data/prompts /app/prompts

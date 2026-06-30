@@ -37,7 +37,7 @@ Cada tarea del DAG (una llamada `POST /run` a un servicio) se reintenta 2 veces 
 
 ### Cliente LLM (por llamada)
 
-Definidas con `tenacity` en `llm.py` (`_call_openrouter` / `_call_generate`):
+Definidas con `tenacity` en `OpenRouterBackend.chat()` (`llm.py`, backend local):
 
 ```
 stop  = stop_after_attempt(LLM_MAX_RETRIES)   # por defecto 3
