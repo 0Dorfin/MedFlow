@@ -10,7 +10,7 @@ Cambiar un prompt o el modelo puede degradar el triaje en silencio. La CI (GitHu
 | Workflow                   | Fichero                       | Trigger                                                             | Qué hace                                                       |
 | -------------------------- | ----------------------------- | ------------------------------------------------------------------- | -------------------------------------------------------------- |
 | `tests`                    | `.github/workflows/tests.yml` | cada push                                                           | corre `pytest` en `services/_common`                           |
-| `eval` (`regression-eval`) | `.github/workflows/eval.yml`  | PR que toca `data/prompts/`** (+ push del propio workflow / manual) | corre el eval, compara con el baseline, falla si hay regresión |
+| `eval` (`regression-eval`) | `.github/workflows/eval.yml`  | toda PR (+ push del workflow / manual) | evalúa solo si cambian `data/prompts/**`: compara con el baseline y falla si hay regresión; en PR sin prompts reporta verde sin evaluar |
 
 
 ---
@@ -22,6 +22,8 @@ En un PR que toca un prompt, el job `regression-eval`:
 1. Corre `services/_common/scripts/eval_fareez.py` sobre el corpus fareez y escribe `eval-result.json` con el `accuracy_grupo`.
 2. Corre `services/_common/scripts/compare_eval.py`, que lo compara con el baseline (`services/_common/eval-baseline.json`, el accuracy aceptado).
 3. Si la caída supera `MAX_DROP` (0.05 por defecto) → **exit 1** → el job falla → el check del PR sale en rojo.
+
+Si el PR **no** toca prompts, el job reporta verde sin ejecutar el eval. El check es requerido en toda PR (debe reportar siempre), pero el eval Azure solo se ejecuta cuando hay prompts que evaluar.
 
 **Por qué usar un umbral.** El LLM no es determinista y la muestra es pequeña, así que el accuracy oscila por ruido. Sin umbral, el gate fallaría por ruido y daría falsas alarmas.
 
