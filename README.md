@@ -1,10 +1,21 @@
-# MedFlow - Triaje Manchester con LLM + Machine Learning
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo-white.png">
+    <img alt="MedFlow" src="docs/assets/logo-black.png" width="110">
+  </picture>
+</p>
+
+<h1 align="center">MedFlow</h1>
+
+<p align="center">Triaje clínico Manchester con LLM + Machine Learning</p>
 
 Sistema que clasifica la urgencia clínica de un paciente (nivel Manchester **C1-C5**) a partir de su texto o audio. Enriquece con un LLM (extracción de síntomas, normalización, etiquetado, score de ansiedad), entrena un modelo de Machine Learning con esas etiquetas y, en producción, predice el nivel de nuevos casos. Incluye un bucle de **auditoría ética** que detecta subestimaciones de gravedad en pacientes con alta carga emocional.
 
 El pipeline se orquesta con **Apache Airflow** (procesamiento batch) y **n8n** (alertas y notificaciones), sobre microservicios **FastAPI**, **Postgres** y **minIO**.
 
-Cada paso de IA corre **local** (gratis) o sobre **Azure AI**, conmutable por variable de entorno (ver `[docs/azure.md](docs/azure.md)`); un **regression gate** en CI bloquea cambios de prompt que degraden el triaje (ver `[docs/ci.md](docs/ci.md)`).
+Cada paso de IA corre **local** (gratis) o sobre **Azure AI**, conmutable por variable de entorno (ver [`docs/azure.md`](docs/azure.md)).
+
+Un **regression gate** en CI bloquea cambios de prompt que degraden el triaje (ver [`docs/ci.md`](docs/ci.md)).
 
 ---
 
@@ -42,7 +53,7 @@ texto / audio
               └─► si hay sesgo emocional → n8n → email
 ```
 
-Detalle del flujo y estados en `[docs/servicios.md](docs/servicios.md)`; arquitectura en `[docs/arquitectura.md](docs/arquitectura.md)`.
+Detalle del flujo y estados en [`docs/servicios.md`](docs/servicios.md); arquitectura en [`docs/arquitectura.md`](docs/arquitectura.md).
 
 ---
 
@@ -188,7 +199,7 @@ Accesos una vez arrancado:
 
 Las credenciales de Airflow, n8n y minIO se definen en `.env` (ver `.env.example`).
 
-El mapa completo de puertos está en `[docs/arquitectura.md](docs/arquitectura.md)`.
+El mapa completo de puertos está en [`docs/arquitectura.md`](docs/arquitectura.md).
 
 ---
 
@@ -325,13 +336,13 @@ Plantilla completa en `.env.example`. Las principales:
 
 | Documento                                            | Contenido                                                                                          |
 | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `[docs/arquitectura.md](docs/arquitectura.md)`       | Diagrama de contenedores, decisiones de diseño, stack y puertos.                                   |
-| `[docs/servicios.md](docs/servicios.md)`             | Referencia detallada de cada microservicio, modelo de datos, DAGs y flujo end-to-end.              |
-| `[docs/dominio-clinico.md](docs/dominio-clinico.md)` | Niveles Manchester, grupos clínicos, diccionario de síntomas, score de ansiedad y auditoría ética. |
-| `[docs/modelo-ml.md](docs/modelo-ml.md)`             | Dataset, features, algoritmos, métricas y guardado/carga del modelo.                               |
-| `[docs/gestion-errores.md](docs/gestion-errores.md)` | Reintentos, registro en Postgres, notificación n8n y recuperación.                                 |
-| `[docs/flujo-n8n.md](docs/flujo-n8n.md)`             | Workflows de n8n.                                                                                  |
-| `[docs/azure.md](docs/azure.md)`                     | Migración local/Azure: backends conmutables, resultados y próximos pasos.                          |
-| `[docs/ci.md](docs/ci.md)`                           | CI: workflow de tests y regression gate (eval + baseline + branch protection).                     |
+| [`docs/arquitectura.md`](docs/arquitectura.md)       | Diagrama de contenedores, decisiones de diseño, stack y puertos.                                   |
+| [`docs/servicios.md`](docs/servicios.md)             | Referencia detallada de cada microservicio, modelo de datos, DAGs y flujo end-to-end.              |
+| [`docs/dominio-clinico.md`](docs/dominio-clinico.md) | Niveles Manchester, grupos clínicos, diccionario de síntomas, score de ansiedad y auditoría ética. |
+| [`docs/modelo-ml.md`](docs/modelo-ml.md)             | Dataset, features, algoritmos, métricas y guardado/carga del modelo.                               |
+| [`docs/gestion-errores.md`](docs/gestion-errores.md) | Reintentos, registro en Postgres, notificación n8n y recuperación.                                 |
+| [`docs/flujo-n8n.md`](docs/flujo-n8n.md)             | Workflows de n8n.                                                                                  |
+| [`docs/azure.md`](docs/azure.md)                     | Migración local/Azure: backends conmutables, resultados y próximos pasos.                          |
+| [`docs/ci.md`](docs/ci.md)                           | CI: workflow de tests y regression gate (eval + baseline + branch protection).                     |
 
 
