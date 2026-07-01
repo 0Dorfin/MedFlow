@@ -1,8 +1,6 @@
 name: eval
 on:
   pull_request:
-    paths:
-      - "data/prompts/**"
   push:
     paths:
       - ".github/workflows/eval.yml"
@@ -13,11 +11,32 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Detectar cambios en prompts
+        id: detect
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            if git diff --name-only "${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}" | grep -q '^data/prompts/'; then
+              echo "changed=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "changed=false" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Sin prompts que evaluar
+        if: steps.detect.outputs.changed != 'true'
+        run: echo "Esta PR no toca data/prompts/; regression-eval pasa sin ejecutar el eval."
       - uses: actions/setup-python@v5
+        if: steps.detect.outputs.changed == 'true'
         with:
           python-version: "3.11"
-      - run: pip install -e 'services/_common[azure]'
+      - name: Instalar dependencias
+        if: steps.detect.outputs.changed == 'true'
+        run: pip install -e 'services/_common[azure]'
       - name: Run eval
+        if: steps.detect.outputs.changed == 'true'
         env:
           LLM_BACKEND: azure
           AZURE_AI_KEY: ${{ secrets.AZURE_AI_KEY }}
@@ -28,4 +47,5 @@ jobs:
           EVAL_PER_GROUP: "2"
         run: python services/_common/scripts/eval_fareez.py
       - name: Compara con baseline
+        if: steps.detect.outputs.changed == 'true'
         run: python services/_common/scripts/compare_eval.py
